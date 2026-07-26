@@ -4,19 +4,18 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-const TEMPLATES = [
-  { id: "emlak", label: "🏠 Emlak İlanı", desc: "Dış cephe → Salon → Mutfak → Kapanis" },
-  { id: "urun", label: "🛍️ Ürün Tanıtımı", desc: "Hero → Problem → Özellikler → CTA" },
-  { id: "dugun", label: "💍 Düğün", desc: "Çift hero → Hazırlık → Tören → Kutlama" },
-  { id: "yemek", label: "🍽️ Yemek Tarifi", desc: "Son ürün → Malzeme → Pişirme → Kapanis" },
-  { id: "bos", label: "✏️ Boş Başla", desc: "Kendi sahne yapını oluştur" },
+const START_MODES = [
+  { id: "gorsel", label: "🖼️ Görseller ile Başla", desc: "Fotoğrafları yükle, hareketli 9:16 video yap" },
+  { id: "metin", label: "📝 Hikaye / Metin ile Başla", desc: "Senaryo veya hikayeyi yaz, AI sahnelere bölsün" },
+  { id: "pdf", label: "📄 PDF / Ders Notu ile Başla", desc: "Ders belgeni yükle, anlatımlı eğitici video yap" },
+  { id: "video", label: "📹 Hazır Video Düzenle", desc: "Kendi videona altyazı, ses ve AI efekti giydir" },
 ];
 
 export default function NewVideo() {
   const router = useRouter();
   const [name, setName] = useState("");
-  const [duration, setDuration] = useState<15 | 30>(15);
-  const [template, setTemplate] = useState("bos");
+  const [duration, setDuration] = useState<15 | 30 | 60>(15);
+  const [mode, setMode] = useState("gorsel");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,7 +43,7 @@ export default function NewVideo() {
         throw new Error(data.error || "Proje oluşturulamadı");
       }
 
-      router.push(`/editor/${id}`);
+      router.push(`/editor/${id}?mode=${mode}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Bir hata oluştu");
       setLoading(false);
@@ -61,20 +60,20 @@ export default function NewVideo() {
         >
           ← Ana Sayfa
         </Link>
-        <span className="text-xs text-gray-600">CinoVidyo</span>
+        <span className="text-xs text-gray-600">CinoVidyo AI Studio</span>
       </div>
 
       <div className="w-full max-w-2xl fade-in">
-        <h1 className="text-3xl font-black mb-1 gradient-text">Yeni Video Projesi</h1>
+        <h1 className="text-3xl font-black mb-1 gradient-text">Yeni Video Başlat</h1>
         <p className="text-gray-500 mb-8 text-sm">
-          Görsellerinizi yükleyip saniyeler içinde gerçek MP4 oluşturun
+          Fikir, ders notu, metin veya görsellerinizden akıllı video oluşturun
         </p>
 
         <form onSubmit={handleCreate} className="space-y-6">
           {/* Proje adı */}
           <div className="glass-card p-5">
             <label className="block mb-2 text-sm font-semibold text-gray-300">
-              Proje Adı
+              Proje Başlığı
             </label>
             <input
               type="text"
@@ -83,17 +82,47 @@ export default function NewVideo() {
               onChange={(e) => setName(e.target.value)}
               maxLength={60}
               className="w-full bg-gray-900 border border-gray-700 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 p-3 rounded-lg text-white placeholder-gray-600 outline-none transition-all"
-              placeholder="Örn: Tatil Vlog, Ürün Lansmanı..."
+              placeholder="Örn: Tarih Ders Notları, Ürün Tanıtımı, Instagram Kurgusu..."
             />
+          </div>
+
+          {/* Başlangıç Yöntemi */}
+          <div className="glass-card p-5">
+            <label className="block mb-3 text-sm font-semibold text-gray-300">
+              Başlangıç Yöntemi
+            </label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {START_MODES.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setMode(m.id)}
+                  className="text-left px-4 py-3 rounded-xl transition-all duration-200 flex flex-col justify-between"
+                  style={{
+                    background:
+                      mode === m.id
+                        ? "rgba(124,58,237,0.15)"
+                        : "rgba(255,255,255,0.03)",
+                    border:
+                      mode === m.id
+                        ? "1px solid rgba(124,58,237,0.4)"
+                        : "1px solid rgba(255,255,255,0.06)",
+                  }}
+                >
+                  <p className="font-semibold text-sm text-gray-200">{m.label}</p>
+                  <p className="text-xs text-gray-500 mt-1">{m.desc}</p>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Süre */}
           <div className="glass-card p-5">
             <label className="block mb-3 text-sm font-semibold text-gray-300">
-              Video Süresi
+              Hedef Video Süresi
             </label>
             <div className="flex gap-3">
-              {([15, 30] as const).map((d) => (
+              {([15, 30, 60] as const).map((d) => (
                 <button
                   key={d}
                   type="button"
@@ -109,45 +138,9 @@ export default function NewVideo() {
                         ? "1px solid #7c3aed"
                         : "1px solid rgba(255,255,255,0.08)",
                     color: duration === d ? "white" : "#9ca3af",
-                    boxShadow: duration === d ? "0 0 20px rgba(124,58,237,0.3)" : "none",
                   }}
                 >
                   {d} Saniye
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Şablon seçimi */}
-          <div className="glass-card p-5">
-            <label className="block mb-3 text-sm font-semibold text-gray-300">
-              Başlangıç Şablonu
-            </label>
-            <div className="grid grid-cols-1 gap-2">
-              {TEMPLATES.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setTemplate(t.id)}
-                  className="w-full text-left px-4 py-3 rounded-xl transition-all duration-200 flex items-start gap-3"
-                  style={{
-                    background:
-                      template === t.id
-                        ? "rgba(124,58,237,0.15)"
-                        : "rgba(255,255,255,0.03)",
-                    border:
-                      template === t.id
-                        ? "1px solid rgba(124,58,237,0.4)"
-                        : "1px solid rgba(255,255,255,0.06)",
-                  }}
-                >
-                  <div className="flex-1">
-                    <p className="font-semibold text-sm text-gray-200">{t.label}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{t.desc}</p>
-                  </div>
-                  {template === t.id && (
-                    <span className="text-violet-400 text-xs font-bold mt-0.5">✓</span>
-                  )}
                 </button>
               ))}
             </div>
@@ -169,10 +162,10 @@ export default function NewVideo() {
             {loading ? (
               <span className="flex items-center justify-center gap-2">
                 <span className="inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                Proje Oluşturuluyor...
+                Hazırlanıyor...
               </span>
             ) : (
-              "🎬 Projeyi Oluştur ve Editöre Geç"
+              "🚀 Editörü Aç & AI Asistanı Başlat"
             )}
           </button>
         </form>
