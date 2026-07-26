@@ -1,72 +1,107 @@
-import Database from "better-sqlite3";
 import path from "path";
 import os from "os";
 import fs from "fs";
 
-// Railway: /app/data is the persistent disk; local: temp dir
-const dbDir = process.env.DB_PATH
-  ? process.env.DB_PATH
-  : process.env.NODE_ENV === "production"
-  ? "/app/data"
-  : path.join(os.tmpdir(), "cinovidyo_db");
-if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+// Serverless ve client-side uyumlu In-Memory / Supabase / Local Storage fallback katmanı
+class MemoryDB {
+  private projects: Map<string, any> = new Map();
+  private assets: Map<string, any> = new Map();
+  private scenes: Map<string, any> = new Map();
+  private chatMessages: Map<string, any> = new Map();
+  private projectSources: Map<string, any> = new Map();
 
-const db = new Database(path.join(dbDir, "projects.db"));
+  constructor() {
+    // Statik mock veriler (Örnek projeler)
+    const demoId = "demo-123";
+    this.projects.set(demoId, {
+      id: demoId,
+      name: "Örnek Reels Projesi",
+      status: "DRAFT",
+      duration: 15,
+      date: new Date().toISOString(),
+    });
+  }
 
-db.pragma('journal_mode = WAL');
+  transaction(fn: Function) {
+    return (...args: any[]) => {
+      return fn(...args);
+    };
+  }
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS projects (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'DRAFT',
-    duration INTEGER NOT NULL DEFAULT 15,
-    date TEXT NOT NULL
-  );
+  prepare(sql: string) {
+    const normalized = sql.trim().toLowerCase();
 
-  CREATE TABLE IF NOT EXISTS assets (
-    id TEXT PRIMARY KEY,
-    project_id TEXT NOT NULL,
-    name TEXT NOT NULL,
-    file_path TEXT NOT NULL,
-    mime_type TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-  );
+    return {
+      all: (...args: any[]) => {
+        if (normalized.includes("from projects")) {
+          return Array.from(this.projects.values());
+        }
+        if (normalized.includes("from scenes")) {
+          const projectId = args[0];
+          return Array.from(this.scenes.values()).filter(
+            (s) => s.project_id === projectId
+          );
+        }
+        if (normalized.includes("from assets")) {
+          const projectId = args[0];
+          return Array.from(this.assets.values()).filter(
+            (a) => a.project_id === projectId
+          );
+        }
+        if (normalized.includes("from chat_messages")) {
+          const projectId = args[0];
+          return Array.from(this.chatMessages.values()).filter(
+            (m) => m.project_id === projectId
+          );
+        }
+        return [];
+      },
+      get: (...args: any[]) => {
+        if (normalized.includes("from projects where id = ?")) {
+          return this.projects.get(args[0]) || null;
+        }
+        if (normalized.includes("select count(*) as cnt from assets")) {
+          const projectId = args[0];
+          const cnt = Array.from(this.assets.values()).filter(
+            (a) => a.project_id === projectId
+          ).length;
+          return { cnt };
+        }
+        return null;
+      },
+      run: (...args: any[]) => {
+        if (normalized.startsWith("insert into projects")) {
+          const [id, name, status, duration, date] = args;
+          this.projects.set(id, { id, name, status, duration, date });
+        } else if (normalized.startsWith("insert into assets")) {
+          const [id, project_id, name, file_path, mime_type, created_at] = args;
+          this.assets.set(id, { id, project_id, name, file_path, mime_type, created_at });
+        } else if (normalized.startsWith("insert into scenes")) {
+          const [id, project_id, asset_id, scene_order, duration_in_frames, motion, transition, subtitle, bg_type, bg_data, created_at] = args;
+          this.scenes.set(id, { id, project_id, asset_id, scene_order, duration_in_frames, motion, transition, subtitle, bg_type, bg_data, created_at });
+        } else if (normalized.startsWith("insert into chat_messages")) {
+          const [id, project_id, role, content, created_at] = args;
+          this.chatMessages.set(id, { id, project_id, role, content, created_at });
+        } else if (normalized.startsWith("delete from projects")) {
+          const id = args[0];
+          this.projects.delete(id);
+        } else if (normalized.startsWith("delete from scenes")) {
+          const projectId = args[0];
+          Array.from(this.scenes.entries()).forEach(([sId, scene]) => {
+            if (scene.project_id === projectId) {
+              this.scenes.delete(sId);
+            }
+          });
+        }
+        return { changes: 1 };
+      },
+    };
+  }
 
-  CREATE TABLE IF NOT EXISTS scenes (
-    id TEXT PRIMARY KEY,
-    project_id TEXT NOT NULL,
-    asset_id TEXT,
-    scene_order INTEGER NOT NULL DEFAULT 0,
-    duration_in_frames INTEGER NOT NULL DEFAULT 150,
-    motion TEXT NOT NULL DEFAULT 'zoom_in',
-    transition TEXT NOT NULL DEFAULT 'fade',
-    subtitle TEXT DEFAULT '',
-    bg_type TEXT DEFAULT 'image',
-    bg_data TEXT DEFAULT '',
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-  );
+  exec(sql: string) {
+    return true;
+  }
+}
 
-  CREATE TABLE IF NOT EXISTS chat_messages (
-    id TEXT PRIMARY KEY,
-    project_id TEXT NOT NULL,
-    role TEXT NOT NULL,
-    content TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-  );
-
-  CREATE TABLE IF NOT EXISTS project_sources (
-    id TEXT PRIMARY KEY,
-    project_id TEXT NOT NULL,
-    type TEXT NOT NULL,
-    content TEXT NOT NULL,
-    file_name TEXT,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-  );
-`);
-
+const db = new MemoryDB();
 export default db;

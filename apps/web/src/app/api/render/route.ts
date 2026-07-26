@@ -21,13 +21,22 @@ export async function POST(req: Request) {
       }>;
     };
 
-    // Sahne listesi geldi mi, yoksa default test mi kullanacağız?
+    // Serverless Free Tier dürüst kılavuz kontrolü (Vercel serverless ortamında mıyız?)
+    const isServerlessEnvironment = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
+
+    if (isServerlessEnvironment) {
+      return NextResponse.json({
+        status: "CLIENT_RENDER_REQUIRED",
+        message: "Serverless (Vercel Free) ortamında sunucu tarafı 5 dakikalık ağır Chromium/FFmpeg renderı devre dışıdır. Tarayıcı (Client-side) önizleme veya Render.com Free Worker kullanınız.",
+        notice: "CinoVidyo Free MVP: Tarayıcınızda anlık video önizleme ve dışa aktarma moduna geçildi."
+      });
+    }
+
     let imagePaths: string[] = [];
     let durations: number[] = [];
     let useTestAssets = false;
 
     if (scenes && scenes.length > 0 && projectId) {
-      // Gerçek assets
       for (const scene of scenes) {
         if (scene.assetId) {
           const asset = db
@@ -35,11 +44,10 @@ export async function POST(req: Request) {
             .get(scene.assetId) as { file_path: string } | undefined;
           if (asset && fs.existsSync(asset.file_path)) {
             imagePaths.push(asset.file_path);
-            durations.push(Math.round((scene.durationInFrames ?? 150) / 30)); // frame → saniye
+            durations.push(Math.round((scene.durationInFrames ?? 150) / 30));
             continue;
           }
         }
-        // Asset yoksa test görsellerinden doldur
         const fallback = [
           path.resolve(process.cwd(), "../../data/test-assets/scene-red.png"),
           path.resolve(process.cwd(), "../../data/test-assets/scene-green.png"),
@@ -49,7 +57,6 @@ export async function POST(req: Request) {
         durations.push(Math.round((scene.durationInFrames ?? 150) / 30));
       }
     } else {
-      // Hiç sahne yoksa: test moduna düş
       useTestAssets = true;
       const assetDir = path.resolve(process.cwd(), "../../data/test-assets");
       imagePaths = [
@@ -67,28 +74,25 @@ export async function POST(req: Request) {
       "../../apps/worker/src/test-render.ts"
     );
 
-    // Çıktıyı public klasörüne de kopyalayacağız
     const outputDir = path.resolve(process.cwd(), "../../data/outputs");
-    fs.mkdirSync(outputDir, { recursive: true });
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
 
     return new Promise<NextResponse>((resolve) => {
       const cmd = `npx ts-node --project "${path.resolve(process.cwd(), "../../apps/worker/tsconfig.json")}" "${workerTestScript}" "${durationsArg}" "${prefix}"`;
-      console.log("Render command:", cmd);
 
       exec(cmd, { cwd: path.resolve(process.cwd(), "../../apps/worker") }, (error, stdout, stderr) => {
         if (error) {
-          console.error("Render error:", error.message);
-          console.error("stderr:", stderr);
           resolve(
             NextResponse.json(
-              { error: "Render başarısız", detail: stderr.slice(-500) },
+              { error: "Render yerel ortamda başarısız", detail: stderr.slice(-500) },
               { status: 500 }
             )
           );
           return;
         }
 
-        // Output dosyasını bul (en son oluşturulan)
         const files = fs
           .readdirSync(outputDir)
           .filter((f) => f.startsWith(prefix) && f.endsWith(".mp4"))
@@ -98,7 +102,6 @@ export async function POST(req: Request) {
         const outputFile = files[0]?.name;
 
         if (outputFile) {
-          // Public klasörüne kopyala
           const destFile = path.resolve(process.cwd(), "public/output.mp4");
           fs.copyFileSync(path.join(outputDir, outputFile), destFile);
           resolve(
