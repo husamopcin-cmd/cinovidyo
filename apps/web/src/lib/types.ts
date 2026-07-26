@@ -4,7 +4,7 @@
 export type Motion = "none" | "zoom_in" | "zoom_out" | "pan_left" | "pan_right";
 export type Transition = "cut" | "fade";
 export type SceneKind = "image" | "video" | "text";
-export type VisualStyle = "sunrise" | "focus" | "growth" | "energy" | "steps" | "minimal";
+export type VisualStyle = "sunrise" | "focus" | "growth" | "energy" | "steps" | "minimal" | "cat" | "home";
 
 export type SubtitleStyle = {
   color: string;

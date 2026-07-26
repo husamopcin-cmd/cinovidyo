@@ -178,7 +178,7 @@ export default function NewProject() {
 
         <div style={{ marginBottom: 22 }}>
           <div className="label" style={{ marginBottom: 10 }}>Hazır profesyonel akışlar</div>
-          <div className="grid grid-2">
+          <div className="grid template-grid">
             {TEMPLATES.map((template) => (
               <button
                 key={template.id}

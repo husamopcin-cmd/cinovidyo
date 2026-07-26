@@ -196,7 +196,59 @@ function drawVisual(
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
-  if (visual === "sunrise") {
+  if (visual === "cat") {
+    const bounce = Math.sin(p * Math.PI * 4) * 22;
+    ctx.translate(0, bounce);
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.beginPath();
+    ctx.arc(0, 0, 150, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-120, -90);
+    ctx.lineTo(-165, -220);
+    ctx.lineTo(-42, -145);
+    ctx.moveTo(120, -90);
+    ctx.lineTo(165, -220);
+    ctx.lineTo(42, -145);
+    ctx.fill();
+    ctx.fillStyle = "rgba(76,29,149,0.95)";
+    ctx.beginPath();
+    ctx.arc(-55, -20, 18, 0, Math.PI * 2);
+    ctx.arc(55, -20, 18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(76,29,149,0.95)";
+    ctx.lineWidth = 12;
+    ctx.beginPath();
+    ctx.arc(0, 35, 46, 0.15 * Math.PI, 0.85 * Math.PI);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,0.85)";
+    ctx.lineWidth = 18;
+    const arm = Math.sin(p * Math.PI * 4) * 0.6;
+    ctx.beginPath();
+    ctx.moveTo(-120, 85);
+    ctx.lineTo(-260, 120 + arm * 110);
+    ctx.moveTo(120, 85);
+    ctx.lineTo(260, 120 - arm * 110);
+    ctx.stroke();
+  } else if (visual === "home") {
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.lineWidth = 22;
+    ctx.beginPath();
+    ctx.moveTo(-300, 30);
+    ctx.lineTo(0, -245);
+    ctx.lineTo(300, 30);
+    ctx.lineTo(245, 30);
+    ctx.lineTo(245, 255);
+    ctx.lineTo(-245, 255);
+    ctx.lineTo(-245, 30);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,0.2)";
+    ctx.fillRect(-62, 70, 124, 185);
+    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    ctx.fillRect(-180, 60, 80, 80);
+    ctx.fillRect(100, 60, 80, 80);
+  } else if (visual === "sunrise") {
     const sunY = 70 - p * 70;
     const sun = ctx.createRadialGradient(0, sunY, 20, 0, sunY, 220);
     sun.addColorStop(0, "rgba(255,244,184,0.95)");

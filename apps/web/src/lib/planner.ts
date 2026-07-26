@@ -26,6 +26,46 @@ function expandShortTopic(raw: string): Array<{ title: string; subtitle: string;
   const topic = cleanTopic(raw);
   const lower = topic.toLocaleLowerCase("tr");
 
+  if (/(kedi|kediler)/.test(lower) && /(ev|oda|emlak|tanıt)/.test(lower)) {
+    return [
+      { title: "Evin yıldızları sahnede", subtitle: "Dans eden kediler seni eğlenceli bir ev turuna davet ediyor.", visual: "cat" },
+      { title: "Ferah salon", subtitle: "İlk kedimiz geniş salonu ve gün ışığı alan yaşam alanını tanıtıyor.", visual: "cat" },
+      { title: "Modern mutfak", subtitle: "Mutfaktaki kedimiz kullanışlı tezgâhı ve düzenli depolama alanlarını gösteriyor.", visual: "cat" },
+      { title: "Rahat odalar", subtitle: "Her oda farklı bir dans ve kısa bir özellik anlatımıyla ekrana geliyor.", visual: "cat" },
+      { title: "Final dansı", subtitle: "Tüm kediler kapanışta buluşuyor: Bu evi görmek için hemen iletişime geç.", visual: "cat" },
+    ];
+  }
+
+  if (/(emlak|ev|daire|villa|salon|mutfak)/.test(lower)) {
+    return [
+      { title: "Yeni yaşamına hoş geldin", subtitle: "Evin dış cephesi ve güçlü ilk izlenimiyle tura başla.", visual: "home" },
+      { title: "Ferah yaşam alanı", subtitle: "Gün ışığı alan salonu ve kullanışlı yerleşimi öne çıkar.", visual: "home" },
+      { title: "Modern mutfak", subtitle: "Mutfaktaki tasarım, depolama ve kullanım avantajlarını göster.", visual: "home" },
+      { title: "Konforlu odalar", subtitle: "Yatak odalarını, detayları ve evin sunduğu sakinliği tanıt.", visual: "home" },
+      { title: "Yerinde gör", subtitle: "Konum avantajını vurgula ve randevu için net bir iletişim çağrısı yap.", visual: "home" },
+    ];
+  }
+
+  if (/(ürün|urun|reklam|satış|satis|tanıtım)/.test(lower)) {
+    return [
+      { title: "İlk bakışta fark yarat", subtitle: "Ürünü güçlü ve temiz bir açılış görüntüsüyle tanıt.", visual: "focus" },
+      { title: "Sorunu göster", subtitle: "Müşterinin yaşadığı temel problemi kısa ve anlaşılır biçimde anlat.", visual: "minimal" },
+      { title: "Çözümü öne çıkar", subtitle: "Ürünün en güçlü faydasını gerçek kullanım sonucuyla eşleştir.", visual: "energy" },
+      { title: "Neden bu ürün?", subtitle: "Kullanım kolaylığını ve rakiplerinden ayrılan özelliklerini göster.", visual: "steps" },
+      { title: "Şimdi harekete geç", subtitle: "Net bir satın alma veya iletişim çağrısıyla videoyu tamamla.", visual: "growth" },
+    ];
+  }
+
+  if (/(yemek|tarif|malzeme|pişir|pisir)/.test(lower)) {
+    return [
+      { title: "Sonucu önce göster", subtitle: "İştah açıcı final görüntüsüyle izleyiciyi ilk saniyede yakala.", visual: "sunrise" },
+      { title: "Malzemeler", subtitle: "Gerekli malzemeleri sade ve okunabilir biçimde sırala.", visual: "minimal" },
+      { title: "Hazırlık", subtitle: "Ana hazırlık adımlarını kısa ve takip edilebilir şekilde göster.", visual: "steps" },
+      { title: "Püf noktası", subtitle: "Lezzeti değiştiren pişirme süresini veya önemli tekniği vurgula.", visual: "focus" },
+      { title: "Servis zamanı", subtitle: "Sunum önerisini göster ve tarifi kaydetme çağrısıyla bitir.", visual: "growth" },
+    ];
+  }
+
   if (/(sabah|erken|5'?te|uyan|kalk)/.test(lower)) {
     return [
       { title: "Güne herkesten önce başla", subtitle: "Sabah erken kalkmak günün kontrolünü sana verir.", visual: "sunrise" },
@@ -100,7 +140,7 @@ export function planFromText(raw: string, opts: PlanOptions = {}): Scene[] {
   if (sentences.length === 0) return [];
 
   const expanded =
-    sentences.length === 1 && cleanTopic(raw).length <= 90
+    sentences.length <= 2 && cleanTopic(raw).length <= 240
       ? expandShortTopic(raw)
       : null;
 
@@ -150,6 +190,9 @@ export function planFromText(raw: string, opts: PlanOptions = {}): Scene[] {
     for (const s of scenes) {
       s.duration = Math.round(Math.max(1.5, s.duration * factor) * 2) / 2;
     }
+    const delta = Math.round((opts.targetDuration - totalDuration(scenes)) * 2) / 2;
+    const last = scenes[scenes.length - 1];
+    if (last && last.duration + delta >= 1.5) last.duration += delta;
   }
   return scenes;
 }
@@ -269,6 +312,9 @@ export function applyCommand(
     const target = /dakika|dk/.test(durMatch[2]) ? value * 60 : value;
     const factor = target / Math.max(0.5, totalDuration(next));
     for (const s of next) s.duration = Math.round(Math.max(1.2, s.duration * factor) * 2) / 2;
+    const delta = Math.round((target - totalDuration(next)) * 2) / 2;
+    const last = next[next.length - 1];
+    if (last && last.duration + delta >= 1.2) last.duration += delta;
     return { reply: `Toplam süre ~${target} saniyeye ayarlandı (${next.length} sahne).`, scenes: next };
   }
 
@@ -322,10 +368,10 @@ export function applyCommand(
   // API anahtarı olmasa da "Sabah 5'te kalkmanın faydasını anlat" gibi kısa
   // konu komutları yerel içerik planlayıcı tarafından karşılanır.
   const contentRequest =
-    /(anlat|açıkla|acikla|video|hazırla|hazirla|oluştur|olustur|fayda|neden|nasıl|nasil)/.test(m);
+    /(anlat|açıkla|acikla|video|hazırla|hazirla|oluştur|olustur|fayda|neden|nasıl|nasil|tanıt|tanit|yap|olsun|istiyorum)/.test(m);
   if (message.trim().length > 120 || (message.trim().length >= 10 && contentRequest)) {
     const topic = message
-      .replace(/\b(bana|bir|video|videosu|hazırla|hazirla|oluştur|olustur|anlat|açıkla|acikla)\b/gi, " ")
+      .replace(/\b(bana|bir|video|videosu|hazırla|hazirla|oluştur|olustur|anlat|açıkla|acikla|yap|olsun|istiyorum)\b/gi, " ")
       .replace(/\s+/g, " ")
       .trim();
     const generated = planFromText(topic || message, {
