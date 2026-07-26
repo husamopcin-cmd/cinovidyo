@@ -1,0 +1,16 @@
+{
+  "name": "@cinovidyo/schemas",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "scripts": {
+    "test": "npx tsx test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.0.0"
+  }
+}

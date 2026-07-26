@@ -1,0 +1,20 @@
+{
+  "name": "@cinovidyo/video-template",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "scripts": {
+    "start": "remotion preview src/index.ts",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "remotion": "^4.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "@cinovidyo/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^18.0.0",
+    "typescript": "^5.0.0"
+  }
+}

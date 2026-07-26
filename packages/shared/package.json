@@ -1,0 +1,12 @@
+{
+  "name": "@cinovidyo/shared",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}
