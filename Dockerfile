@@ -12,6 +12,9 @@ RUN apt-get update && apt-get install -y \
     libdrm2 \
     libgbm1 \
     libasound2 \
+    python3 \
+    make \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true

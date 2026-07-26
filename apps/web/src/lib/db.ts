@@ -3,7 +3,7 @@ import path from "path";
 import os from "os";
 import fs from "fs";
 
-const dbDir = path.join(os.tmpdir(), "cinovidyo_db");
+const dbDir = process.env.NODE_ENV === "production" ? path.join(process.cwd(), "../../data") : path.join(os.tmpdir(), "cinovidyo_db");
 if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
 
 const db = new Database(path.join(dbDir, "projects.db"));
