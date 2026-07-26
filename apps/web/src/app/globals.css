@@ -1,4 +1,4 @@
-/* CinoVidyo Global CSS - Self-contained High-End Dark Glassmorphism Styling */
+/* CinoVid AI Studio Global CSS - Self-contained High-End Responsive Dark Glassmorphism Styling */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
@@ -44,6 +44,7 @@ button, input, select, textarea {
 .max-w-5xl { max-width: 64rem; }
 .max-w-xs { max-width: 20rem; }
 .max-w-md { max-width: 28rem; }
+.max-w-lg { max-width: 32rem; }
 .mx-auto { margin-left: auto; margin-right: auto; }
 
 .flex { display: flex; }
@@ -63,10 +64,23 @@ button, input, select, textarea {
 @media (min-width: 768px) {
   .md\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .md\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .md\:flex-row { flex-direction: row; }
 }
 
 @media (min-width: 1024px) {
   .lg\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* Mobile responsive rules */
+@media (max-width: 768px) {
+  .w-80 { width: 100% !important; }
+  .w-72 { width: 100% !important; }
+  .flex-1\.overflow-hidden { flex-direction: column !important; overflow-y: auto !important; }
+  .text-6xl { font-size: 2.75rem !important; }
+  .text-5xl { font-size: 2.25rem !important; }
+  .p-8 { padding: 1.25rem !important; }
+  .px-8 { padding-left: 1rem !important; padding-right: 1rem !important; }
+  .px-10 { padding-left: 1.5rem !important; padding-right: 1.5rem !important; }
 }
 
 .gap-1 { gap: 0.25rem; }
@@ -90,6 +104,7 @@ button, input, select, textarea {
 .px-2 { padding-left: 0.5rem; padding-right: 0.5rem; }
 .px-2\.5 { padding-left: 0.625rem; padding-right: 0.625rem; }
 .px-3 { padding-left: 0.75rem; padding-right: 0.75rem; }
+.px-3\.5 { padding-left: 0.875rem; padding-right: 0.875rem; }
 .px-4 { padding-left: 1rem; padding-right: 1rem; }
 .px-5 { padding-left: 1.25rem; padding-right: 1.25rem; }
 .px-6 { padding-left: 1.5rem; padding-right: 1.5rem; }
@@ -102,6 +117,7 @@ button, input, select, textarea {
 .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
 .py-2\.5 { padding-top: 0.625rem; padding-bottom: 0.625rem; }
 .py-3 { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+.py-3\.5 { padding-top: 0.875rem; padding-bottom: 0.875rem; }
 .py-4 { padding-top: 1rem; padding-bottom: 1rem; }
 
 .mt-0\.5 { margin-top: 0.125rem; }
@@ -212,7 +228,6 @@ button, input, select, textarea {
 
 /* ── Custom UI Elements ── */
 
-/* Glass card */
 .glass-card {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -220,7 +235,6 @@ button, input, select, textarea {
   border-radius: 16px;
 }
 
-/* Gradient text */
 .gradient-text {
   background: linear-gradient(135deg, #c4b5fd 0%, #a78bfa 50%, #60a5fa 100%);
   -webkit-background-clip: text;
@@ -228,7 +242,6 @@ button, input, select, textarea {
   background-clip: text;
 }
 
-/* Glow button */
 .btn-glow {
   position: relative;
   overflow: hidden;
@@ -252,7 +265,6 @@ button, input, select, textarea {
   box-shadow: none;
 }
 
-/* Loading pulse */
 @keyframes pulseRing {
   0% { opacity: 1; }
   50% { opacity: 0.5; }
@@ -262,7 +274,6 @@ button, input, select, textarea {
   animation: pulseRing 1.5s ease-in-out infinite;
 }
 
-/* Fade in */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
@@ -271,7 +282,6 @@ button, input, select, textarea {
   animation: fadeUp 0.3s ease both;
 }
 
-/* Spinner */
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
@@ -279,7 +289,6 @@ button, input, select, textarea {
   animation: spin 1s linear infinite;
 }
 
-/* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

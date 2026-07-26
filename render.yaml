@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: cinovid-ai-studio
+    env: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: NODE_ENV
+        value: production
