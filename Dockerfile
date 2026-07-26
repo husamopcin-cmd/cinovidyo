@@ -3,7 +3,7 @@
 # ═══════════════════════════════════════════
 # STAGE 1: Build
 # ═══════════════════════════════════════════
-FROM node:20-slim AS builder
+FROM node:22-slim AS builder
 
 # Native addon build tools
 RUN apt-get update && apt-get install -y \
@@ -33,7 +33,7 @@ RUN pnpm --filter web build
 # ═══════════════════════════════════════════
 # STAGE 2: Lean Production Runner
 # ═══════════════════════════════════════════
-FROM node:20-slim AS runner
+FROM node:22-slim AS runner
 
 # Minimal runtime deps only (no audio/chromium)
 RUN apt-get update && apt-get install -y \
