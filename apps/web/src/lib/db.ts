@@ -3,7 +3,12 @@ import path from "path";
 import os from "os";
 import fs from "fs";
 
-const dbDir = process.env.NODE_ENV === "production" ? path.join(process.cwd(), "../../data") : path.join(os.tmpdir(), "cinovidyo_db");
+// Railway: /app/data is the persistent disk; local: temp dir
+const dbDir = process.env.DB_PATH
+  ? process.env.DB_PATH
+  : process.env.NODE_ENV === "production"
+  ? "/app/data"
+  : path.join(os.tmpdir(), "cinovidyo_db");
 if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
 
 const db = new Database(path.join(dbDir, "projects.db"));

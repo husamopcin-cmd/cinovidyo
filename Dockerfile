@@ -1,10 +1,49 @@
-# CinoVid AI Studio — Multi-Stage Production Dockerfile
+# CinoVid AI Studio — Railway Production Dockerfile
+# Multi-stage: builder → lean runner
 
-FROM node:20-slim AS base
+# ═══════════════════════════════════════════
+# STAGE 1: Build
+# ═══════════════════════════════════════════
+FROM node:20-slim AS builder
 
-# Install Chromium & FFmpeg for Remotion rendering engine
+# Build tools for native addons (better-sqlite3)
 RUN apt-get update && apt-get install -y \
-    chromium \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Activate pnpm via corepack
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# Copy workspace config files first (enables Docker layer caching)
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
+
+# Copy all package.json files to resolve workspace deps
+COPY apps/web/package.json ./apps/web/
+COPY apps/worker/package.json ./apps/worker/
+COPY packages/schemas/package.json ./packages/schemas/
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/video-template/package.json ./packages/video-template/
+
+# Install all dependencies (compiles better-sqlite3 here)
+RUN pnpm install --frozen-lockfile
+
+# Copy all source code
+COPY . .
+
+# Build only the web app (standalone output as configured in next.config.ts)
+RUN pnpm --filter web build
+
+# ═══════════════════════════════════════════
+# STAGE 2: Lean Production Runner
+# ═══════════════════════════════════════════
+FROM node:20-slim AS runner
+
+# Only runtime system deps (no build tools)
+RUN apt-get update && apt-get install -y \
     ffmpeg \
     fonts-liberation \
     libnss3 \
@@ -12,39 +51,27 @@ RUN apt-get update && apt-get install -y \
     libdrm2 \
     libgbm1 \
     libasound2 \
-    python3 \
-    make \
-    g++ \
     && rm -rf /var/lib/apt/lists/*
-
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV CHROMIUM_PATH=/usr/bin/chromium
 
 WORKDIR /app
 
-# Enable pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
-# Copy workspace files
-COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
-COPY apps/web/package.json ./apps/web/
-COPY apps/worker/package.json ./apps/worker/
-COPY packages/schemas/package.json ./packages/schemas/
-COPY packages/shared/package.json ./packages/shared/
-COPY packages/video-template/package.json ./packages/video-template/
-
-# Install dependencies
-RUN pnpm install --frozen-lockfile
-
-# Copy full source
-COPY . .
-
-# Build all workspace projects
-RUN pnpm build
-
-EXPOSE 3000
-
-ENV PORT=3000
 ENV NODE_ENV=production
 
-CMD ["pnpm", "--filter", "web", "start"]
+# Copy the Next.js standalone build
+COPY --from=builder /app/apps/web/.next/standalone ./
+# Copy static assets
+COPY --from=builder /app/apps/web/.next/static ./apps/web/.next/static
+# Copy public folder
+COPY --from=builder /app/apps/web/public ./apps/web/public
+
+# Copy the native better-sqlite3 addon (built for linux)
+COPY --from=builder /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
+
+# Persistent data directory (Railway disk mounts here, or falls back to this)
+RUN mkdir -p /app/data /app/data/uploads
+
+# Railway automatically injects PORT at runtime.
+# Next.js standalone server.js reads process.env.PORT — no hardcoding needed.
+EXPOSE 3000
+
+CMD ["node", "apps/web/server.js"]

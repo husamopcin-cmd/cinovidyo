@@ -9,8 +9,10 @@ import os from "os";
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 
-// Uploads klasörü: data/uploads (repo kökünden)
-const uploadsDir = path.resolve(process.cwd(), "../../data/uploads");
+// Railway: persistent disk at /app/data; local: relative path
+const uploadsDir = process.env.NODE_ENV === "production"
+  ? "/app/data/uploads"
+  : path.resolve(process.cwd(), "../../data/uploads");
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
