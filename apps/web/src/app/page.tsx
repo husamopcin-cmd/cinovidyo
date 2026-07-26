@@ -9,7 +9,7 @@ const MODES = [
 ];
 
 const FACTS = [
-  { k: "Sunucu maliyeti", v: "0 ₺", d: "Render tarayıcında çalışır; bulut kotası yok." },
+  { k: "Üretim", v: "Cihazında", d: "Videonu doğrudan tarayıcıda oluştur ve indir." },
   { k: "Üyelik", v: "Yok", d: "Hesap açman gerekmez, veriler cihazında kalır." },
   { k: "Çıktı", v: "9:16 · 1080×1920", d: "Reels / Shorts / TikTok formatında video dosyası." },
 ];
@@ -20,11 +20,11 @@ export default function Home() {
       <TopBar />
       <main className="shell">
         <section className="stack" style={{ padding: "48px 0 40px", gap: 22 }}>
-          <span className="badge">Tamamen tarayıcıda çalışır · kurulum yok</span>
+          <span className="badge">Yapay zekâ destekli dikey video stüdyosu</span>
           <h1 className="hero-title">
             Fikrini <span className="grad">dikey videoya</span> çevir.
             <br />
-            Sunucu yok, ücret yok.
+            Dakikalar içinde yayına hazır.
           </h1>
           <p className="lead">
             Metnini, ders notunu, görsellerini veya hazır videonu yükle; AI asistanı sahneleri
