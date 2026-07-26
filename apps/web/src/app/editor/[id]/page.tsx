@@ -383,8 +383,8 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
         const local = applyCommand(message, project.scenes, project.subtitleStyle);
         reply =
           res.status === 503
-            ? `${local.reply}\n\n(Yerel planlayıcı kullanıldı — sunucuda AI anahtarı tanımlı değil.)`
-            : `${local.reply}\n\n(AI sunucusu hata verdi: HTTP ${res.status}. Yerel planlayıcı kullanıldı.)`;
+            ? local.reply
+            : `${local.reply}\n\n(AI servisine ulaşılamadı; yerel video planlayıcı kullanıldı.)`;
         if (local.scenes) nextScenes = local.scenes;
         if (local.subtitleStyle) patch((p) => ({ ...p, subtitleStyle: local.subtitleStyle! }));
       }

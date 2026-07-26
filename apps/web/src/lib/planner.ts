@@ -318,12 +318,24 @@ export function applyCommand(
     }
   }
 
-  // 7) Uzun metin yapıştırıldıysa -> kurguyu ondan üret
-  if (message.trim().length > 120) {
-    const generated = planFromText(message, { tone: "educational" });
+  // 7) İçerik isteği veya yapıştırılan metin -> doğrudan çok sahneli kurgu üret.
+  // API anahtarı olmasa da "Sabah 5'te kalkmanın faydasını anlat" gibi kısa
+  // konu komutları yerel içerik planlayıcı tarafından karşılanır.
+  const contentRequest =
+    /(anlat|açıkla|acikla|video|hazırla|hazirla|oluştur|olustur|fayda|neden|nasıl|nasil)/.test(m);
+  if (message.trim().length > 120 || (message.trim().length >= 10 && contentRequest)) {
+    const topic = message
+      .replace(/\b(bana|bir|video|videosu|hazırla|hazirla|oluştur|olustur|anlat|açıkla|acikla)\b/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const generated = planFromText(topic || message, {
+      tone: /reels|tiktok|shorts|tempolu|enerjik/.test(m) ? "energetic" : "educational",
+      targetDuration: 30,
+      maxScenes: 7,
+    });
     if (generated.length > 0) {
       return {
-        reply: `Metnini ${generated.length} sahneye böldüm (~${totalDuration(generated).toFixed(0)} sn). Sağdaki zaman çizelgesinden düzenleyebilirsin.`,
+        reply: `Konuyu ${generated.length} sahneli bir video akışına dönüştürdüm (~${totalDuration(generated).toFixed(0)} sn). Görsel kompozisyonlar ve altyazılar hazır.`,
         scenes: generated,
       };
     }
@@ -331,7 +343,7 @@ export function applyCommand(
 
   return {
     reply:
-      "Bu komutu yerel planlayıcı çözemedi. Şunları deneyebilirsin: “30 saniye olsun”, “altyazıyı sarı yap”, “daha tempolu yap”, “son sahneyi sil”, “2. sahne: yeni metin”. Gerçek AI için sunucuya ANTHROPIC_API_KEY eklemen gerekir.",
+      "Bu komutu anlayamadım. Bir konu yazıp “anlat” diyebilir veya “30 saniye olsun”, “altyazıyı sarı yap”, “daha tempolu yap”, “son sahneyi sil” ve “2. sahne: yeni metin” komutlarını kullanabilirsin.",
     unhandled: true,
   };
 }
