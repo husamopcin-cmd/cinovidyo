@@ -1,11 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Railway ve benzeri platformlarda dinamik PORT kullan
-  experimental: {
-    serverExternalPackages: ["better-sqlite3"],
-  },
-  // Output standalone: Railway'de dosya boyutunu küçültür
+  // better-sqlite3 sadece server-side çalışır
+  serverExternalPackages: ["better-sqlite3"],
+  // Standalone output: Railway için optimize
   output: "standalone",
 };
 
