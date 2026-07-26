@@ -4,6 +4,7 @@
 export type Motion = "none" | "zoom_in" | "zoom_out" | "pan_left" | "pan_right";
 export type Transition = "cut" | "fade";
 export type SceneKind = "image" | "video" | "text";
+export type VisualStyle = "sunrise" | "focus" | "growth" | "energy" | "steps" | "minimal";
 
 export type SubtitleStyle = {
   color: string;
@@ -33,6 +34,8 @@ export type Scene = {
   title?: string;
   /** text sahneleri için arka plan gradyanı */
   palette?: string;
+  /** görselsiz sahnelerde kullanılan hareketli illüstrasyon */
+  visual?: VisualStyle;
 };
 
 export type Asset = {

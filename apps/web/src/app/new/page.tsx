@@ -193,7 +193,7 @@ export default function NewProject() {
                 placeholder="Örnek: Sabah 5'te kalkmanın 3 faydası. Birincisi, zihnin en dinç anıdır..."
               />
               <p className="tiny" style={{ marginTop: 6 }}>
-                {text.trim().length} karakter — her cümle bir sahne olacak.
+                {text.trim().length} karakter — kısa bir konu yazarsan otomatik olarak çok sahneli bir akış hazırlanır.
               </p>
             </div>
           )}

@@ -159,15 +159,137 @@ function drawTextScene(ctx: CanvasRenderingContext2D, scene: Scene, p: number) {
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, VIDEO_WIDTH, VIDEO_HEIGHT);
 
+  // Üst marka çizgisi
+  ctx.fillStyle = "rgba(255,255,255,0.72)";
+  ctx.font = "700 27px Inter, Arial, sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("CINOVID  •  STORY", 74, 92);
+  ctx.fillStyle = "rgba(255,255,255,0.25)";
+  ctx.fillRect(74, 120, VIDEO_WIDTH - 148, 2);
+
+  drawVisual(ctx, scene.visual ?? "minimal", p);
+
   if (scene.title) {
-    ctx.font = "900 92px Inter, Arial, sans-serif";
+    ctx.font = "900 80px Inter, Arial, sans-serif";
     ctx.fillStyle = "rgba(255,255,255,0.95)";
-    ctx.textAlign = "center";
-    const lines = wrapText(ctx, scene.title, VIDEO_WIDTH - 180);
+    ctx.textAlign = "left";
+    const lines = wrapText(ctx, scene.title, VIDEO_WIDTH - 148).slice(0, 3);
+    const top = 1040 - Math.max(0, lines.length - 1) * 46;
     lines.forEach((line, i) => {
-      ctx.fillText(line, VIDEO_WIDTH / 2, 420 + i * 104);
+      ctx.fillText(line, 74, top + i * 92);
     });
   }
+}
+
+function drawVisual(
+  ctx: CanvasRenderingContext2D,
+  visual: NonNullable<Scene["visual"]>,
+  p: number
+) {
+  const cx = VIDEO_WIDTH / 2;
+  const cy = 570;
+  const pulse = 1 + Math.sin(p * Math.PI * 2) * 0.025;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(pulse, pulse);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  if (visual === "sunrise") {
+    const sunY = 70 - p * 70;
+    const sun = ctx.createRadialGradient(0, sunY, 20, 0, sunY, 220);
+    sun.addColorStop(0, "rgba(255,244,184,0.95)");
+    sun.addColorStop(0.35, "rgba(251,191,36,0.72)");
+    sun.addColorStop(1, "rgba(251,146,60,0)");
+    ctx.fillStyle = sun;
+    ctx.beginPath();
+    ctx.arc(0, sunY, 230, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.45)";
+    ctx.lineWidth = 6;
+    for (let i = 0; i < 5; i++) {
+      ctx.beginPath();
+      ctx.moveTo(-360 + i * 30, 155 + i * 28);
+      ctx.quadraticCurveTo(0, 70 + i * 18, 360 - i * 30, 155 + i * 28);
+      ctx.stroke();
+    }
+  } else if (visual === "focus") {
+    for (let i = 4; i >= 1; i--) {
+      ctx.strokeStyle = `rgba(255,255,255,${0.12 + i * 0.08})`;
+      ctx.lineWidth = 14;
+      ctx.beginPath();
+      ctx.arc(0, 0, i * 82 + p * 12, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(0, 0, 54, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(99,102,241,0.95)";
+    ctx.beginPath();
+    ctx.arc(0, 0, 24, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (visual === "growth") {
+    ctx.strokeStyle = "rgba(255,255,255,0.8)";
+    ctx.lineWidth = 18;
+    ctx.beginPath();
+    ctx.moveTo(-290, 210);
+    ctx.bezierCurveTo(-160, 120, -120, -40, 20, -70);
+    ctx.bezierCurveTo(150, -100, 170, -240, 310, -300);
+    ctx.stroke();
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.moveTo(310, -300);
+    ctx.lineTo(225, -287);
+    ctx.lineTo(282, -218);
+    ctx.closePath();
+    ctx.fill();
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = `rgba(255,255,255,${0.18 + i * 0.12})`;
+      ctx.fillRect(-320 + i * 150, 220 - i * 105, 105, 35 + i * 70);
+    }
+  } else if (visual === "energy") {
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.lineWidth = 22;
+    ctx.beginPath();
+    for (let x = -390; x <= 390; x += 12) {
+      const y = Math.sin(x / 48 + p * Math.PI * 2) * 72 * Math.exp(-Math.abs(x) / 390);
+      if (x === -390) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,0.12)";
+    ctx.beginPath();
+    ctx.arc(0, 0, 245 + Math.sin(p * Math.PI * 2) * 12, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (visual === "steps") {
+    for (let i = 0; i < 4; i++) {
+      const x = -330 + i * 170;
+      const y = 190 - i * 130;
+      ctx.fillStyle = `rgba(255,255,255,${0.18 + i * 0.16})`;
+      ctx.fillRect(x, y, 145, 110);
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.font = "800 40px Inter, Arial, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(String(i + 1), x + 72, y + 70);
+    }
+  } else {
+    ctx.rotate(p * 0.14 - 0.07);
+    for (let i = 0; i < 3; i++) {
+      ctx.strokeStyle = `rgba(255,255,255,${0.16 + i * 0.13})`;
+      ctx.lineWidth = 12;
+      ctx.beginPath();
+      const size = 190 + i * 90;
+      ctx.roundRect(-size, -size, size * 2, size * 2, 72);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.beginPath();
+    ctx.arc(0, 0, 66, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 function drawSubtitle(

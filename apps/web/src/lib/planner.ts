@@ -12,9 +12,58 @@ import {
   type Scene,
   type SubtitleStyle,
   type Transition,
+  type VisualStyle,
 } from "./types";
 
 const MOTIONS: Motion[] = ["zoom_in", "pan_right", "zoom_out", "pan_left"];
+const VISUALS: VisualStyle[] = ["sunrise", "focus", "growth", "energy", "steps", "minimal"];
+
+function cleanTopic(raw: string): string {
+  return raw.trim().replace(/[.!?…]+$/, "").replace(/\s+/g, " ");
+}
+
+function expandShortTopic(raw: string): Array<{ title: string; subtitle: string; visual: VisualStyle }> {
+  const topic = cleanTopic(raw);
+  const lower = topic.toLocaleLowerCase("tr");
+
+  if (/(sabah|erken|5'?te|uyan|kalk)/.test(lower)) {
+    return [
+      { title: "Güne herkesten önce başla", subtitle: "Sabah erken kalkmak günün kontrolünü sana verir.", visual: "sunrise" },
+      { title: "Zihnin daha berrak", subtitle: "Sessiz saatlerde dikkat dağınıklığı azalır, odaklanmak kolaylaşır.", visual: "focus" },
+      { title: "Kendine zaman aç", subtitle: "Egzersiz, okuma veya planlama için kesintisiz bir alan oluşur.", visual: "steps" },
+      { title: "Enerjini doğru yönet", subtitle: "Düzenli uyku ritmi gün içindeki enerjini daha dengeli tutar.", visual: "energy" },
+      { title: "Küçük başla", subtitle: "Alarmını yarın yalnızca 20 dakika erkene kur ve ritmini adım adım oluştur.", visual: "growth" },
+    ];
+  }
+
+  if (/(ders|çalış|öğren|sınav|okul)/.test(lower)) {
+    return [
+      { title: "Daha çok değil, daha akıllı çalış", subtitle: topic, visual: "focus" },
+      { title: "Tek hedef seç", subtitle: "Bir oturumda yalnızca bir konuya odaklan.", visual: "minimal" },
+      { title: "Aktif tekrar yap", subtitle: "Okumakla yetinme; öğrendiğini kendi cümlelerinle anlat.", visual: "steps" },
+      { title: "Kısa molalar ver", subtitle: "Odak blokları arasında zihnine dinlenme payı bırak.", visual: "energy" },
+      { title: "Bugün uygula", subtitle: "İlk 25 dakikalık çalışma bloğunu şimdi başlat.", visual: "growth" },
+    ];
+  }
+
+  if (/(spor|egzersiz|fit|sağlık|koş)/.test(lower)) {
+    return [
+      { title: "Değişim ilk adımla başlar", subtitle: topic, visual: "energy" },
+      { title: "Süreklilik kazanır", subtitle: "Mükemmel programdan önce sürdürülebilir bir rutin kur.", visual: "steps" },
+      { title: "Enerjin yükselir", subtitle: "Düzenli hareket hem bedenini hem zihnini güçlendirir.", visual: "sunrise" },
+      { title: "İlerlemeni gör", subtitle: "Küçük gelişmeleri kaydet; motivasyon sonuçlardan beslenir.", visual: "growth" },
+      { title: "Bugün on dakika", subtitle: "Başlamak için uzun bir antrenmana ihtiyacın yok.", visual: "focus" },
+    ];
+  }
+
+  return [
+    { title: topic, subtitle: "Bunu doğru uyguladığında farkı kısa sürede görebilirsin.", visual: "minimal" },
+    { title: "Neden önemli?", subtitle: `${topic}, hedefe daha bilinçli ve düzenli ilerlemeni sağlar.`, visual: "focus" },
+    { title: "Net bir adım seç", subtitle: "Büyük hedefi bugün tamamlayabileceğin küçük bir adıma böl.", visual: "steps" },
+    { title: "İlerlemeni takip et", subtitle: "Ölçtüğün gelişme motivasyonunu ve devamlılığını güçlendirir.", visual: "growth" },
+    { title: "Şimdi başla", subtitle: "Mükemmel zamanı bekleme; ilk küçük adımı bugün at.", visual: "energy" },
+  ];
+}
 
 /** Okuma hızına göre sahne süresi (saniye). */
 export function durationForText(text: string): number {
@@ -50,6 +99,11 @@ export function planFromText(raw: string, opts: PlanOptions = {}): Scene[] {
   const sentences = splitSentences(raw);
   if (sentences.length === 0) return [];
 
+  const expanded =
+    sentences.length === 1 && cleanTopic(raw).length <= 90
+      ? expandShortTopic(raw)
+      : null;
+
   const maxScenes = opts.maxScenes ?? 12;
   const chunks: string[] = [];
   // Çok kısa cümleleri birleştir, çok uzunları kırp.
@@ -69,19 +123,26 @@ export function planFromText(raw: string, opts: PlanOptions = {}): Scene[] {
   const energetic = opts.tone === "energetic";
   const calm = opts.tone === "calm";
 
-  const scenes: Scene[] = limited.map((text, i) => ({
+  const source = expanded ?? limited.map((text, i) => ({
+    title: i === 0 && opts.title ? opts.title : "",
+    subtitle: text,
+    visual: VISUALS[i % VISUALS.length],
+  }));
+
+  const scenes: Scene[] = source.map((item, i) => ({
     id: newId("sc"),
     kind: "text",
     duration: energetic
-      ? Math.max(2.5, durationForText(text) * 0.75)
+      ? Math.max(2.5, durationForText(item.subtitle) * 0.75)
       : calm
-        ? durationForText(text) * 1.25
-        : durationForText(text),
+        ? durationForText(item.subtitle) * 1.25
+        : durationForText(item.subtitle),
     motion: calm ? "zoom_in" : MOTIONS[i % MOTIONS.length],
     transition: energetic ? "cut" : "fade",
-    subtitle: text,
-    title: i === 0 && opts.title ? opts.title : undefined,
+    subtitle: item.subtitle,
+    title: item.title || (i === 0 && opts.title ? opts.title : undefined),
     palette: PALETTE_KEYS[i % PALETTE_KEYS.length],
+    visual: item.visual,
   }));
 
   if (opts.targetDuration && scenes.length > 0) {

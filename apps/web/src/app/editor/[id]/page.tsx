@@ -224,9 +224,30 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
       transition: "fade",
       subtitle: "Yeni sahne metni",
       palette: PALETTE_KEYS[project.scenes.length % PALETTE_KEYS.length],
+      visual: "minimal",
     };
     setScenes([...project.scenes, scene]);
     setSelected(project.scenes.length);
+  }
+
+  function improveStory() {
+    if (!project || project.scenes.length === 0) return;
+    const seed =
+      project.scenes.length === 1
+        ? project.scenes[0].title || project.scenes[0].subtitle
+        : project.scenes.map((scene) => scene.subtitle).join(" ");
+    const scenes = planFromText(seed, {
+      title: project.name,
+      tone: "energetic",
+      targetDuration: Math.max(20, Math.min(45, project.scenes.length * 6)),
+      maxScenes: 7,
+    });
+    if (scenes.length > 0) {
+      setScenes(scenes);
+      setSelected(0);
+      setTime(0);
+      setNotice(`Akış geliştirildi: ${scenes.length} sahneli profesyonel kurgu hazır.`);
+    }
   }
 
   /* ── Dosya yükleme ── */
@@ -591,8 +612,8 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
             </div>
           )}
 
-          <div className="card">
-            <div className="label">Kalite analizi</div>
+          <details className="card quality-details">
+            <summary>Kalite kontrolü · {report.overall}/10</summary>
             <div className="row" style={{ gap: 8, marginBottom: 8 }}>
               <span className="badge">Hook {report.hook}/10</span>
               <span className="badge">Tempo {report.tempo}/10</span>
@@ -606,7 +627,7 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
                 <li key={n}>{n}</li>
               ))}
             </ul>
-          </div>
+          </details>
         </div>
 
         {/* Orta: sahneler */}
@@ -627,6 +648,9 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
           {notice && <div className="notice">{notice}</div>}
 
           <div className="row">
+            <button className="btn btn-sm btn-accent" onClick={improveStory}>
+              ✦ Akışı geliştir
+            </button>
             <button className="btn btn-sm" onClick={addTextScene}>
               + Metin sahnesi
             </button>
@@ -835,7 +859,7 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
         </div>
 
         {/* Sağ: AI / stil / medya */}
-        <div className="editor-col stack">
+        <div className="editor-tools stack">
           <div className="tabs">
             <button className={`tab ${tab === "ai" ? "active" : ""}`} onClick={() => setTab("ai")}>
               AI asistan

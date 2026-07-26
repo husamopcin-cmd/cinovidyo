@@ -175,11 +175,10 @@ textarea {
 /* ── Kartlar ── */
 
 .card {
-  background: var(--glass);
+  background: rgba(16, 14, 27, 0.82);
   border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border-radius: 14px;
   padding: 18px;
-  backdrop-filter: blur(10px);
 }
 
 .card-hover {
@@ -248,6 +247,15 @@ textarea {
 .btn-primary:hover:not(:disabled) {
   box-shadow: 0 0 38px rgba(139, 92, 246, 0.65);
   transform: translateY(-1px);
+}
+
+.btn-accent {
+  color: #ddd6fe;
+  border-color: rgba(139, 92, 246, 0.45);
+  background: rgba(139, 92, 246, 0.12);
+}
+.btn-accent:hover:not(:disabled) {
+  background: rgba(139, 92, 246, 0.22);
 }
 
 .btn-danger {
@@ -346,20 +354,23 @@ textarea {
 .editor {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-  max-width: 1400px;
+  gap: 20px;
+  max-width: 1220px;
   margin: 0 auto;
-  padding: 18px 16px 90px;
+  padding: 24px 20px 90px;
 }
 
 @media (min-width: 1024px) {
   .editor {
-    grid-template-columns: 340px minmax(0, 1fr) 360px;
+    grid-template-columns: 300px minmax(0, 1fr);
     align-items: start;
   }
-  .editor-col {
+  .editor > .editor-col:first-child {
     position: sticky;
-    top: 78px;
+    top: 84px;
+  }
+  .editor-tools {
+    grid-column: 2;
   }
 }
 
@@ -389,12 +400,32 @@ textarea {
   padding: 12px;
   border-radius: 14px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(14, 12, 24, 0.72);
   transition: 0.18s;
 }
 .scene-item.active {
   border-color: rgba(139, 92, 246, 0.65);
-  background: rgba(139, 92, 246, 0.09);
+  background: rgba(139, 92, 246, 0.07);
+  box-shadow: inset 3px 0 0 var(--violet);
+}
+
+.quality-details summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 750;
+  color: var(--muted);
+  list-style: none;
+}
+.quality-details summary::-webkit-details-marker {
+  display: none;
+}
+.quality-details[open] summary {
+  margin-bottom: 14px;
+  color: var(--fg);
+}
+
+.editor-tools .card {
+  max-width: none;
 }
 
 .scene-index {
