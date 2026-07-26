@@ -1,107 +1,83 @@
-"use client";
-
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import TopBar from "../components/TopBar";
+
+const MODES = [
+  { icon: "📝", title: "Metin / Hikaye", desc: "Yazdığın metni sahnelere böler, altyazılı videoya çevirir." },
+  { icon: "📄", title: "PDF / Ders notu", desc: "PDF'ten metni çıkarır, konu konu anlatan eğitim videosu kurar." },
+  { icon: "🖼️", title: "Görseller", desc: "En fazla 20 görseli zoom/kaydırma efektleriyle birleştirir." },
+  { icon: "🎬", title: "Hazır video", desc: "Yüklediğin videonun üstüne altyazı, müzik ve efekt giydirir." },
+];
+
+const FACTS = [
+  { k: "Sunucu maliyeti", v: "0 ₺", d: "Render tarayıcında çalışır; bulut kotası yok." },
+  { k: "Üyelik", v: "Yok", d: "Hesap açman gerekmez, veriler cihazında kalır." },
+  { k: "Çıktı", v: "9:16 · 1080×1920", d: "Reels / Shorts / TikTok formatında video dosyası." },
+];
 
 export default function Home() {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
   return (
-    <div className="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center p-8 relative overflow-hidden">
-      {/* Background glow effects */}
-      <div
-        className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full opacity-10 pointer-events-none"
-        style={{
-          background:
-            "radial-gradient(ellipse at center, #7c3aed 0%, #4f46e5 40%, transparent 70%)",
-          filter: "blur(60px)",
-        }}
-      />
-      <div
-        className="absolute bottom-0 right-0 w-[400px] h-[400px] rounded-full opacity-5 pointer-events-none"
-        style={{
-          background: "radial-gradient(ellipse at center, #2563eb 0%, transparent 70%)",
-          filter: "blur(60px)",
-        }}
-      />
+    <>
+      <TopBar />
+      <main className="shell">
+        <section className="stack" style={{ padding: "48px 0 40px", gap: 22 }}>
+          <span className="badge">Tamamen tarayıcıda çalışır · kurulum yok</span>
+          <h1 className="hero-title">
+            Fikrini <span className="grad">dikey videoya</span> çevir.
+            <br />
+            Sunucu yok, ücret yok.
+          </h1>
+          <p className="lead">
+            Metnini, ders notunu, görsellerini veya hazır videonu yükle; AI asistanı sahneleri
+            kursun, sen düzenle, videoyu cihazında üret ve indir. Yüklediğin hiçbir dosya
+            internete çıkmaz.
+          </p>
+          <div className="row" style={{ gap: 12 }}>
+            <Link href="/new" className="btn btn-primary btn-lg">
+              Videoya başla →
+            </Link>
+            <Link href="/projects" className="btn btn-lg">
+              Projelerim
+            </Link>
+          </div>
+        </section>
 
-      {/* Logo & brand */}
-      <div
-        className={`flex flex-col items-center gap-4 z-10 transition-all duration-700 ${
-          mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
-        }`}
-      >
-        {/* Icon */}
-        <div
-          className="w-20 h-20 rounded-2xl flex items-center justify-center text-4xl mb-2 shadow-2xl"
-          style={{
-            background: "linear-gradient(135deg, #4f46e5, #7c3aed)",
-            boxShadow: "0 0 40px rgba(124,58,237,0.5)",
-          }}
-        >
-          🎬
-        </div>
-
-        <h1 className="text-6xl font-black tracking-tight gradient-text">CinoVid AI Studio</h1>
-        <p className="text-xl text-gray-400 text-center max-w-lg leading-relaxed">
-          Görsellerinizden, PDF ders notlarınızdan ve hikayelerinizden{" "}
-          <span className="text-violet-400 font-semibold">saniyeler içinde</span>{" "}
-          9:16 dikey, anlatımlı MP4 video oluşturun
-        </p>
-
-        {/* Feature pills */}
-        <div className="flex flex-wrap gap-2 justify-center mt-2">
-          {["🤖 AI Chat Asistanı", "📄 PDF / Ders Notu", "📝 Hikaye → Video", "📹 Video Kurgu", "⚡ Remotion Render"].map((f) => (
-            <span
-              key={f}
-              className="px-3.5 py-1.5 rounded-full text-xs font-semibold"
-              style={{
-                background: "rgba(124,58,237,0.15)",
-                border: "1px solid rgba(124,58,237,0.3)",
-                color: "#a78bfa",
-              }}
-            >
-              {f}
-            </span>
+        <section className="grid grid-2" style={{ marginBottom: 34 }}>
+          {MODES.map((m) => (
+            <div key={m.title} className="card">
+              <div style={{ fontSize: 26, marginBottom: 8 }}>{m.icon}</div>
+              <div className="h2" style={{ marginBottom: 6 }}>
+                {m.title}
+              </div>
+              <p className="muted">{m.desc}</p>
+            </div>
           ))}
-        </div>
+        </section>
 
-        {/* CTA Buttons */}
-        <div className="flex gap-4 mt-8">
-          <Link
-            href="/projects"
-            className="px-6 py-3.5 rounded-xl font-semibold text-gray-300 hover:text-white transition-all duration-200"
-            style={{
-              background: "rgba(255,255,255,0.05)",
-              border: "1px solid rgba(255,255,255,0.1)",
-            }}
-          >
-            📁 Projelerim
-          </Link>
-          <Link href="/new" className="btn-glow px-8 py-3.5 rounded-xl font-bold text-white">
-            ✨ Yeni Video Oluştur
-          </Link>
-        </div>
+        <section className="grid grid-3">
+          {FACTS.map((f) => (
+            <div key={f.k} className="card">
+              <div className="label">{f.k}</div>
+              <div style={{ fontSize: 24, fontWeight: 900, letterSpacing: "-0.02em" }}>{f.v}</div>
+              <p className="tiny" style={{ marginTop: 6 }}>
+                {f.d}
+              </p>
+            </div>
+          ))}
+        </section>
 
-        {/* Stats */}
-        <div className="flex gap-8 mt-12 text-center opacity-50">
-          <div>
-            <p className="text-2xl font-bold">9:16</p>
-            <p className="text-xs text-gray-500">Dikey Format</p>
+        <section className="card" style={{ marginTop: 34 }}>
+          <div className="h2" style={{ marginBottom: 10 }}>
+            Nasıl çalışıyor?
           </div>
-          <div className="w-px bg-gray-700" />
-          <div>
-            <p className="text-2xl font-bold">AI Chat</p>
-            <p className="text-xs text-gray-500">Kişisel Asistan</p>
-          </div>
-          <div className="w-px bg-gray-700" />
-          <div>
-            <p className="text-2xl font-bold">PDF / Metin</p>
-            <p className="text-xs text-gray-500">Çoklu Girdi</p>
-          </div>
-        </div>
-      </div>
-    </div>
+          <p className="muted">
+            Sahneler tarayıcıdaki bir canvas üzerine 1080×1920 çözünürlükte çizilir ve{" "}
+            <strong>MediaRecorder</strong> ile gerçek bir video dosyasına kaydedilir. Kayıt gerçek
+            zamanlıdır: 30 saniyelik video yaklaşık 30 saniyede üretilir. Projelerin ve dosyaların
+            tarayıcının IndexedDB deposunda tutulur — başka bir cihazda görünmez, tarayıcı
+            verilerini silersen kaybolur.
+          </p>
+        </section>
+      </main>
+    </>
   );
 }

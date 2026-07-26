@@ -1,133 +1,143 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
-import db from "../../../../lib/db";
+
+// İsteğe bağlı gerçek AI katmanı.
+// ANTHROPIC_API_KEY tanımlı değilse 503 döner ve istemci yerel planlayıcıya düşer.
+// Sunucuda hiçbir proje verisi saklanmaz; sadece kurgu planı üretilir.
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
-interface ChatRequest {
-  projectId: string;
-  message: string;
-  currentScenes: Array<{
-    id: string;
-    assetId?: string | null;
-    durationInFrames: number;
-    motion: string;
-    transition: string;
-    subtitle: string;
-  }>;
-}
+const MOTIONS = ["none", "zoom_in", "zoom_out", "pan_left", "pan_right"] as const;
+const TRANSITIONS = ["cut", "fade"] as const;
+const PALETTES = ["violet", "ocean", "sunset", "forest", "night", "gold"] as const;
 
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const projectId = searchParams.get("projectId");
-  if (!projectId) {
-    return NextResponse.json({ error: "projectId required" }, { status: 400 });
-  }
+const PLAN_SCHEMA = {
+  type: "object",
+  properties: {
+    reply: {
+      type: "string",
+      description: "Kullanıcıya gösterilecek kısa Türkçe cevap (en fazla 2 cümle).",
+    },
+    changeScenes: {
+      type: "boolean",
+      description: "Sahne listesi değiştirilecekse true, sadece sohbet ise false.",
+    },
+    scenes: {
+      type: "array",
+      description: "changeScenes true ise yeni sahne listesi, değilse boş dizi.",
+      items: {
+        type: "object",
+        properties: {
+          subtitle: { type: "string", description: "Ekranda görünecek metin." },
+          duration: { type: "number", description: "Saniye cinsinden süre (1.5 - 10)." },
+          motion: { type: "string", enum: [...MOTIONS] },
+          transition: { type: "string", enum: [...TRANSITIONS] },
+          palette: { type: "string", enum: [...PALETTES] },
+        },
+        required: ["subtitle", "duration", "motion", "transition", "palette"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["reply", "changeScenes", "scenes"],
+  additionalProperties: false,
+} as const;
 
-  const messages = db
-    .prepare("SELECT * FROM chat_messages WHERE project_id = ? ORDER BY created_at ASC")
-    .all(projectId);
+const SYSTEM = `Sen CinoVid AI Studio'nun kurgu asistanısın. Kullanıcı 9:16 dikey kısa video hazırlıyor.
+Görevin: kullanıcının Türkçe talebini anlayıp video sahnelerini planlamak.
 
-  return NextResponse.json({ messages });
-}
+Kurallar:
+- Cevapların Türkçe ve kısa olsun.
+- Sahne altyazıları ekranda okunacak; her sahne en fazla 120 karakter.
+- Süreler metnin okunma hızına uygun olsun (kısa metin 2-3 sn, uzun metin 5-7 sn).
+- Reels/TikTok istenirse sahneleri kısalt ve transition "cut" kullan; sinematik/sakin istenirse "fade" ve daha uzun süre kullan.
+- Kullanıcı sadece soru soruyorsa veya sohbet ediyorsa changeScenes=false ver ve scenes boş dizi olsun.
+- Yapamadığın bir şey istenirse dürüstçe söyle; olmayan bir özelliği yapmış gibi anlatma.`;
+
+type Scene = {
+  subtitle: string;
+  duration: number;
+  motion: string;
+  transition: string;
+  palette: string;
+};
 
 export async function POST(req: Request) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json(
+      {
+        error: "AI_DISABLED",
+        message:
+          "Sunucuda ANTHROPIC_API_KEY tanımlı değil. Yerel planlayıcı kullanılıyor (ücretsiz, çevrimdışı).",
+      },
+      { status: 503 }
+    );
+  }
+
+  let message: string;
+  let scenes: Scene[];
   try {
-    const { projectId, message, currentScenes } = (await req.json()) as ChatRequest;
-
-    if (!projectId || !message) {
-      return NextResponse.json({ error: "projectId and message required" }, { status: 400 });
+    const body = (await req.json()) as { message?: string; scenes?: Scene[] };
+    if (!body.message?.trim()) {
+      return NextResponse.json({ error: "message alanı zorunlu" }, { status: 400 });
     }
+    message = body.message.slice(0, 8000);
+    scenes = Array.isArray(body.scenes) ? body.scenes.slice(0, 40) : [];
+  } catch {
+    return NextResponse.json({ error: "Geçersiz istek gövdesi" }, { status: 400 });
+  }
 
-    const now = new Date().toISOString();
-    const userMsgId = "msg_" + Math.random().toString(36).substr(2, 9);
-    const aiMsgId = "msg_" + Math.random().toString(36).substr(2, 9);
+  const client = new Anthropic({ apiKey });
 
-    // Save user message to DB
-    db.prepare(
-      "INSERT INTO chat_messages (id, project_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)"
-    ).run(userMsgId, projectId, "user", message, now);
-
-    // Smart AI Logic Engine: Parse user prompt & construct tailored scenes & response
-    const msgLower = message.toLowerCase();
-
-    let aiReply = "";
-    let updatedScenes = [...currentScenes];
-
-    if (msgLower.includes("ders") || msgLower.includes("pdf") || msgLower.includes("hoca") || msgLower.includes("anlat")) {
-      aiReply = "💡 Ders içeriğiniz analiz edildi! Konuları sırasıyla ekrana yazan, net altyazılı 3 eğitici slayt sahnesi oluşturdum.";
-      updatedScenes = [
+  try {
+    const response = await client.messages.create({
+      model: "claude-opus-5",
+      max_tokens: 8000,
+      system: SYSTEM,
+      output_config: {
+        effort: "low",
+        format: { type: "json_schema", schema: PLAN_SCHEMA },
+      },
+      messages: [
         {
-          id: "s_edu_1",
-          assetId: null,
-          durationInFrames: 150,
-          motion: "zoom_in",
-          transition: "fade",
-          subtitle: "📚 BÖLÜM 1: Konunun Tanımı & Temel Kavramlar",
+          role: "user",
+          content: `Mevcut sahneler (JSON):\n${JSON.stringify(scenes)}\n\nKullanıcının isteği:\n${message}`,
         },
-        {
-          id: "s_edu_2",
-          assetId: null,
-          durationInFrames: 180,
-          motion: "pan_left",
-          transition: "fade",
-          subtitle: "🧠 BÖLÜM 2: Önemli Formüller ve Kural İncelemesi",
-        },
-        {
-          id: "s_edu_3",
-          assetId: null,
-          durationInFrames: 150,
-          motion: "zoom_out",
-          transition: "cut",
-          subtitle: "🎯 BÖLÜM 3: Örnek Soru Çözümü & Özet",
-        },
-      ];
-    } else if (msgLower.includes("reels") || msgLower.includes("instagram") || msgLower.includes("tiktok") || msgLower.includes("enerjik")) {
-      aiReply = "⚡ Sosyal medya için yüksek tempolu, dikkat çekici 9:16 kurgu planı hazırlandı!";
-      updatedScenes = currentScenes.map((s, idx) => ({
-        ...s,
-        durationInFrames: 90, // 3 saniye tempolu
-        motion: idx % 2 === 0 ? "zoom_in" : "pan_right",
-        transition: "cut",
-        subtitle: s.subtitle ? `🔥 ${s.subtitle}` : `🔥 SAHNE ${idx + 1}: Dikkat Çekici Detay`,
-      }));
-    } else if (msgLower.includes("ses") || msgLower.includes("anlatım") || msgLower.includes("erkek") || msgLower.includes("kadın")) {
-      aiReply = "🎙️ Ses ve seslendirme tonu tercihiniz kaydedildi. Sahne altyazıları ses ritmine göre hizalandı.";
-    } else if (msgLower.includes("daha hızlı") || msgLower.includes("hızlandır")) {
-      aiReply = "⏩ Videonuz daha tempolu hale getirildi. Sahne süreleri 3 saniyeye düşürüldü.";
-      updatedScenes = currentScenes.map((s) => ({
-        ...s,
-        durationInFrames: 90,
-      }));
-    } else if (msgLower.includes("yavaş") || msgLower.includes("sakin") || msgLower.includes("premium")) {
-      aiReply = "✨ Videonuz premium ve sakin bir moda geçirildi. Yumuşak fade geçişleri uygulandı.";
-      updatedScenes = currentScenes.map((s) => ({
-        ...s,
-        durationInFrames: 180, // 6 saniye
-        motion: "zoom_out",
-        transition: "fade",
-      }));
-    } else {
-      aiReply = `🤖 "${message}" talimatınız alındı! Sahneler isteğinize uygun olarak güncellendi ve kurgu planına yansıtıldı.`;
-      if (updatedScenes.length > 0) {
-        updatedScenes[0] = {
-          ...updatedScenes[0],
-          subtitle: message.length < 40 ? message : updatedScenes[0].subtitle,
-        };
-      }
-    }
-
-    // Save AI response to DB
-    db.prepare(
-      "INSERT INTO chat_messages (id, project_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)"
-    ).run(aiMsgId, projectId, "assistant", aiReply, now);
-
-    return NextResponse.json({
-      success: true,
-      aiReply,
-      updatedScenes,
+      ],
     });
+
+    if (response.stop_reason === "refusal") {
+      return NextResponse.json(
+        { error: "REFUSED", message: "Model bu isteği yanıtlamayı reddetti." },
+        { status: 422 }
+      );
+    }
+
+    const text = response.content.find((b) => b.type === "text")?.text;
+    if (!text) {
+      return NextResponse.json(
+        { error: "EMPTY", message: "Model boş yanıt döndürdü." },
+        { status: 502 }
+      );
+    }
+
+    return NextResponse.json(JSON.parse(text));
   } catch (err) {
-    console.error("AI Chat API Error:", err);
-    return NextResponse.json({ error: "AI Assistant Error" }, { status: 500 });
+    if (err instanceof Anthropic.AuthenticationError) {
+      return NextResponse.json(
+        { error: "AUTH", message: "ANTHROPIC_API_KEY geçersiz." },
+        { status: 502 }
+      );
+    }
+    if (err instanceof Anthropic.RateLimitError) {
+      return NextResponse.json(
+        { error: "RATE_LIMIT", message: "AI kotası doldu, biraz sonra tekrar dene." },
+        { status: 429 }
+      );
+    }
+    const detail = err instanceof Error ? err.message : "bilinmeyen hata";
+    return NextResponse.json({ error: "AI_ERROR", message: detail }, { status: 502 });
   }
 }

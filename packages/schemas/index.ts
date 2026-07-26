@@ -7,7 +7,7 @@ export const allowedMimeTypes = [
   "video/mp4",
   "video/webm",
   "application/pdf",
-];
+] as const;
 
 export const projectSchema = z.object({
   id: z.string().uuid(),
@@ -33,7 +33,7 @@ export const assetSchema = z.object({
   projectId: z.string(),
   name: z.string(),
   url: z.string(),
-  mimeType: z.string(),
+  mimeType: z.enum(allowedMimeTypes),
 });
 
 export const sceneSchema = z.object({

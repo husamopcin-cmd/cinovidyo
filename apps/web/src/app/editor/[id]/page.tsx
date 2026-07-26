@@ -1,729 +1,1041 @@
 "use client";
 
-import { useState, useEffect, useRef, use } from "react";
 import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState, use } from "react";
+import TopBar from "../../../components/TopBar";
 import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from "@dnd-kit/core";
+  buildTimeline,
+  isSupported,
+  loadMedia,
+  recordVideo,
+  renderFrame,
+  type MediaMap,
+} from "../../../lib/engine";
+import { analyze, applyCommand, planFromText } from "../../../lib/planner";
+import { extractPdfText } from "../../../lib/pdf";
+import { deleteAsset, getProject, listAssets, putAsset, saveProject } from "../../../lib/store";
 import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-  useSortable,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+  DEFAULT_SUBTITLE_STYLE,
+  PALETTE_KEYS,
+  VIDEO_HEIGHT,
+  VIDEO_WIDTH,
+  newId,
+  type Asset,
+  type Motion,
+  type Project,
+  type Scene,
+  type Transition,
+} from "../../../lib/types";
 
-// ─── Types ───────────────────────────────────────────────
-interface Asset {
-  id: string;
-  project_id: string;
-  name: string;
-  file_path: string;
-  mime_type: string;
-}
+const MOTION_LABELS: Record<Motion, string> = {
+  none: "Sabit",
+  zoom_in: "Yakınlaş",
+  zoom_out: "Uzaklaş",
+  pan_left: "Sola kaydır",
+  pan_right: "Sağa kaydır",
+};
 
-interface Scene {
-  id: string;
-  assetId: string | null;
-  durationInFrames: number;
-  motion: string;
-  transition: string;
-  subtitle: string;
-}
+const SUB_COLORS = ["#ffffff", "#facc15", "#22c55e", "#60a5fa", "#f472b6", "#fb923c"];
 
-interface Project {
-  id: string;
-  name: string;
-  status: string;
-  duration: number;
-  date: string;
-}
+type Tab = "ai" | "style" | "media";
 
-interface ChatMsg {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-}
-
-// ─── Sortable Item ────────────────────────────────────────
-function SortableScene({
-  scene,
-  index,
-  assets,
-  onChange,
-}: {
-  scene: Scene;
-  index: number;
-  assets: Asset[];
-  onChange: (id: string, field: string, value: string | number | null) => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
-    id: scene.id,
-  });
-  const style = { transform: CSS.Transform.toString(transform), transition };
-
-  const assignedAsset = assets.find((a) => a.id === scene.assetId);
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="glass-card p-3 mb-3 fade-in"
-      {...attributes}
-    >
-      <div
-        className="flex items-center gap-2 mb-3 cursor-grab active:cursor-grabbing"
-        {...listeners}
-      >
-        <span className="text-gray-600 select-none">⠿</span>
-        <span className="text-xs font-bold text-gray-300">Sahne {index + 1}</span>
-        <div className="flex-1" />
-        {assignedAsset && (
-          <span className="text-xs text-violet-400 truncate max-w-[100px]">
-            🖼 {assignedAsset.name}
-          </span>
-        )}
-      </div>
-
-      <div
-        className="space-y-2 text-xs"
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <select
-          className="w-full bg-gray-900 border border-gray-700 rounded-lg p-1.5 text-gray-300 focus:border-violet-500 outline-none"
-          value={scene.assetId ?? ""}
-          onChange={(e) => onChange(scene.id, "assetId", e.target.value || null)}
-        >
-          <option value="">— Görsel / Medya Seç —</option>
-          {assets.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
-        </select>
-
-        <div className="flex items-center gap-2">
-          <span className="text-gray-500 w-12">Süre (s)</span>
-          <input
-            type="number"
-            min={1}
-            max={30}
-            value={Math.round(scene.durationInFrames / 30)}
-            onChange={(e) =>
-              onChange(scene.id, "durationInFrames", Number(e.target.value) * 30)
-            }
-            className="w-16 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-white focus:border-violet-500 outline-none"
-          />
-        </div>
-
-        <select
-          className="w-full bg-gray-900 border border-gray-700 rounded-lg p-1.5 text-gray-300 focus:border-violet-500 outline-none"
-          value={scene.motion}
-          onChange={(e) => onChange(scene.id, "motion", e.target.value)}
-        >
-          <option value="zoom_in">🔍 Zoom In</option>
-          <option value="zoom_out">🔎 Zoom Out</option>
-          <option value="pan_left">⬅️ Pan Sol</option>
-          <option value="pan_right">➡️ Pan Sağ</option>
-          <option value="none">⏹ Sabit</option>
-        </select>
-
-        <select
-          className="w-full bg-gray-900 border border-gray-700 rounded-lg p-1.5 text-gray-300 focus:border-violet-500 outline-none"
-          value={scene.transition}
-          onChange={(e) => onChange(scene.id, "transition", e.target.value)}
-        >
-          <option value="fade">🌅 Fade Geçiş</option>
-          <option value="cut">✂️ Kesme</option>
-        </select>
-
-        <input
-          type="text"
-          placeholder="Altyazı metni..."
-          value={scene.subtitle}
-          onChange={(e) => onChange(scene.id, "subtitle", e.target.value)}
-          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-2 py-1.5 text-white placeholder-gray-600 focus:border-violet-500 outline-none"
-        />
-      </div>
-    </div>
-  );
-}
-
-// ─── Main Editor ──────────────────────────────────────────
 export default function Editor({ params }: { params: Promise<{ id: string }> }) {
-  const { id: projectId } = use(params);
+  const { id } = use(params);
 
   const [project, setProject] = useState<Project | null>(null);
-  const [scenes, setScenes] = useState<Scene[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [loadingProject, setLoadingProject] = useState(true);
+  const [media, setMedia] = useState<MediaMap>(new Map());
+  const [loadError, setLoadError] = useState("");
+  const [selected, setSelected] = useState(0);
+  const [tab, setTab] = useState<Tab>("ai");
 
-  // Tabs: 'scenes' | 'ai' | 'source'
-  const [activeTab, setActiveTab] = useState<"scenes" | "ai" | "source">("ai");
+  const [time, setTime] = useState(0);
+  const [playing, setPlaying] = useState(false);
 
-  // AI Chat
-  const [chatMessages, setChatMessages] = useState<ChatMsg[]>([
-    {
-      id: "init",
-      role: "assistant",
-      content:
-        "👋 Merhaba! Ben CinoVidyo AI Asistanın. Bana videon hakkında ne istediğini söyle (örn: 'Ders notumu özeti yap', 'Sosyal medya için tempolu olsun', 'Şu tarz ses/ton kullan'). Sahnelerini senin için otomatik kurgulayacağım!",
-    },
-  ]);
   const [chatInput, setChatInput] = useState("");
-  const [aiSending, setAiSending] = useState(false);
-  const chatBottomRef = useRef<HTMLDivElement>(null);
+  const [aiBusy, setAiBusy] = useState(false);
 
-  // Sources (Text / PDF / Video)
-  const [textSource, setTextSource] = useState("");
-  const [sourceLoading, setSourceLoading] = useState(false);
-  const sourceFileRef = useRef<HTMLInputElement>(null);
+  const [recording, setRecording] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [output, setOutput] = useState<{ url: string; ext: string; sizeMB: number } | null>(null);
+  const [renderError, setRenderError] = useState("");
+  const [notice, setNotice] = useState("");
 
-  // Render & Upload
-  const [renderStatus, setRenderStatus] = useState<
-    "DRAFT" | "SAVING" | "RENDERING" | "COMPLETED" | "FAILED"
-  >("DRAFT");
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [renderError, setRenderError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const rafRef = useRef<number>(0);
+  const startedRef = useRef({ wall: 0, at: 0 });
+  const cancelRef = useRef({ cancelled: false });
+  const imageInput = useRef<HTMLInputElement>(null);
+  const videoInput = useRef<HTMLInputElement>(null);
+  const audioInput = useRef<HTMLInputElement>(null);
+  const docInput = useRef<HTMLInputElement>(null);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  const supported = useMemo(() => (typeof window === "undefined" ? true : isSupported()), []);
+  const timeline = useMemo(() => buildTimeline(project?.scenes ?? []), [project?.scenes]);
+  const total = timeline.length ? timeline[timeline.length - 1].end : 0;
+  const report = useMemo(() => analyze(project?.scenes ?? []), [project?.scenes]);
+
+  /* ── Yükleme ── */
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const p = await getProject(id);
+        if (!alive) return;
+        if (!p) {
+          setLoadError("Bu proje bu tarayıcıda bulunamadı. Projeler cihazında yerel olarak saklanır.");
+          return;
+        }
+        const list = await listAssets(id);
+        if (!alive) return;
+        setProject(p);
+        setAssets(list);
+        setMedia(await loadMedia(list));
+      } catch (err) {
+        if (alive) setLoadError(err instanceof Error ? err.message : "Proje açılamadı.");
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [id]);
+
+  /* ── Kalıcılaştırma ── */
+
+  const patch = useCallback(
+    (fn: (p: Project) => Project) => {
+      setProject((prev) => {
+        if (!prev) return prev;
+        const next = { ...fn(prev), updatedAt: new Date().toISOString() };
+        void saveProject(next).catch((err) =>
+          setNotice(`Kaydedilemedi: ${err instanceof Error ? err.message : "bilinmeyen hata"}`)
+        );
+        return next;
+      });
+    },
+    []
   );
 
-  // Load project
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await fetch(`/api/projects/${projectId}`);
-        if (!res.ok) throw new Error("Proje bulunamadı");
-        const data = await res.json();
-        setProject(data.project);
-        setAssets(data.assets ?? []);
+  const setScenes = useCallback(
+    (scenes: Scene[], keepVersion = true) => {
+      patch((p) => ({
+        ...p,
+        scenes,
+        versions: keepVersion
+          ? [
+              { label: new Date().toLocaleTimeString("tr-TR"), createdAt: new Date().toISOString(), scenes: p.scenes },
+              ...p.versions,
+            ].slice(0, 10)
+          : p.versions,
+      }));
+    },
+    [patch]
+  );
 
-        if (data.scenes && data.scenes.length > 0) {
-          setScenes(
-            data.scenes.map((s: {
-              id: string;
-              asset_id: string | null;
-              duration_in_frames: number;
-              motion: string;
-              transition: string;
-              subtitle: string;
-            }) => ({
-              id: s.id,
-              assetId: s.asset_id,
-              durationInFrames: s.duration_in_frames,
-              motion: s.motion,
-              transition: s.transition,
-              subtitle: s.subtitle ?? "",
-            }))
-          );
-        } else {
-          setScenes([
-            { id: "s1", assetId: null, durationInFrames: 150, motion: "zoom_in", transition: "fade", subtitle: "" },
-            { id: "s2", assetId: null, durationInFrames: 150, motion: "zoom_out", transition: "cut", subtitle: "" },
-            { id: "s3", assetId: null, durationInFrames: 150, motion: "pan_left", transition: "fade", subtitle: "" },
-          ]);
-        }
+  /* ── Önizleme çizimi ── */
 
-        // Fetch chat history
-        const chatRes = await fetch(`/api/ai/chat?projectId=${projectId}`);
-        const chatData = await chatRes.json();
-        if (chatData.messages && chatData.messages.length > 0) {
-          setChatMessages(chatData.messages);
-        }
-      } catch (err) {
-        console.error("Project load error:", err);
-      } finally {
-        setLoadingProject(false);
-      }
-    };
-    load();
-  }, [projectId]);
+  const draw = useCallback(
+    (t: number) => {
+      const canvas = canvasRef.current;
+      if (!canvas || !project) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      renderFrame(ctx, timeline, t, media, project.subtitleStyle);
+    },
+    [project, timeline, media]
+  );
 
   useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages]);
+    draw(time);
+  }, [draw, time]);
 
-  // Handle Drag & Drop
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (over && active.id !== over.id) {
-      setScenes((items) => {
-        const oldIndex = items.findIndex((i) => i.id === active.id);
-        const newIndex = items.findIndex((i) => i.id === over.id);
-        return arrayMove(items, oldIndex, newIndex);
-      });
+  useEffect(() => {
+    if (!playing) {
+      media.forEach((el) => el instanceof HTMLVideoElement && el.pause());
+      cancelAnimationFrame(rafRef.current);
+      return;
     }
-  };
+    startedRef.current = { wall: performance.now(), at: time >= total ? 0 : time };
+    let activeIndex = -1;
 
-  const updateScene = (id: string, field: string, value: string | number | null) => {
-    setScenes((prev) => prev.map((s) => (s.id === id ? { ...s, [field]: value } : s)));
-  };
+    const tick = () => {
+      const t = startedRef.current.at + (performance.now() - startedRef.current.wall) / 1000;
+      if (t >= total) {
+        setTime(total);
+        setPlaying(false);
+        return;
+      }
+      const index = timeline.findIndex((it) => t >= it.start && t < it.end);
+      if (index !== -1 && index !== activeIndex) {
+        activeIndex = index;
+        const assetId = timeline[index].scene.assetId;
+        const el = assetId ? media.get(assetId) : undefined;
+        media.forEach((m) => m instanceof HTMLVideoElement && m !== el && m.pause());
+        if (el instanceof HTMLVideoElement) {
+          try {
+            el.currentTime = 0;
+          } catch {
+            /* seek desteklenmiyor */
+          }
+          void el.play().catch(() => undefined);
+        }
+      }
+      setTime(t);
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+    // time bilerek bağımlılık dışı: oynatma başladığı andaki değeri kullanılır
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing, total, timeline, media]);
 
-  const addScene = () => {
-    const newId = "s_" + Math.random().toString(36).substr(2, 6);
-    setScenes((prev) => [
-      ...prev,
-      { id: newId, assetId: null, durationInFrames: 150, motion: "zoom_in", transition: "fade", subtitle: "" },
-    ]);
-  };
+  /* ── Sahne işlemleri ── */
 
-  const removeScene = (id: string) => {
-    setScenes((prev) => prev.filter((s) => s.id !== id));
-  };
+  function updateScene(index: number, changes: Partial<Scene>) {
+    if (!project) return;
+    const scenes = project.scenes.map((s, i) => (i === index ? { ...s, ...changes } : s));
+    patch((p) => ({ ...p, scenes }));
+  }
 
-  // AI Chat Send
-  const handleSendChat = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!chatInput.trim() || aiSending) return;
+  function moveScene(index: number, dir: -1 | 1) {
+    if (!project) return;
+    const target = index + dir;
+    if (target < 0 || target >= project.scenes.length) return;
+    const scenes = [...project.scenes];
+    [scenes[index], scenes[target]] = [scenes[target], scenes[index]];
+    patch((p) => ({ ...p, scenes }));
+    setSelected(target);
+  }
 
-    const userMsg = chatInput.trim();
+  function removeScene(index: number) {
+    if (!project) return;
+    setScenes(project.scenes.filter((_, i) => i !== index));
+    setSelected((s) => Math.max(0, Math.min(s, (project.scenes.length ?? 2) - 2)));
+  }
+
+  function addTextScene() {
+    if (!project) return;
+    const scene: Scene = {
+      id: newId("sc"),
+      kind: "text",
+      duration: 3,
+      motion: "zoom_in",
+      transition: "fade",
+      subtitle: "Yeni sahne metni",
+      palette: PALETTE_KEYS[project.scenes.length % PALETTE_KEYS.length],
+    };
+    setScenes([...project.scenes, scene]);
+    setSelected(project.scenes.length);
+  }
+
+  /* ── Dosya yükleme ── */
+
+  async function uploadMedia(list: FileList | null, kind: "image" | "video" | "audio") {
+    if (!list || !project) return;
+    setNotice("");
+    try {
+      const added: Asset[] = [];
+      for (const file of Array.from(list).slice(0, 20)) {
+        const asset: Asset = {
+          id: newId("ast"),
+          projectId: project.id,
+          name: file.name,
+          mime: file.type,
+          kind,
+          blob: file,
+          createdAt: new Date().toISOString(),
+        };
+        await putAsset(asset);
+        added.push(asset);
+      }
+      const nextAssets = [...assets, ...added];
+      setAssets(nextAssets);
+      setMedia(await loadMedia(nextAssets));
+
+      if (kind === "audio") {
+        patch((p) => ({ ...p, audioAssetId: added[0]?.id }));
+        setNotice(`Müzik eklendi: ${added[0]?.name}`);
+        return;
+      }
+      const scenes = [
+        ...project.scenes,
+        ...added.map((a, i) => ({
+          id: newId("sc"),
+          kind: kind === "video" ? ("video" as const) : ("image" as const),
+          assetId: a.id,
+          duration: kind === "video" ? 8 : 4,
+          motion: kind === "video" ? ("none" as Motion) : ("zoom_in" as Motion),
+          transition: "fade" as Transition,
+          subtitle: "",
+          palette: PALETTE_KEYS[(project.scenes.length + i) % PALETTE_KEYS.length],
+        })),
+      ];
+      setScenes(scenes);
+      setNotice(`${added.length} dosya eklendi.`);
+    } catch (err) {
+      setNotice(`Yükleme başarısız: ${err instanceof Error ? err.message : "bilinmeyen hata"}`);
+    }
+  }
+
+  async function importDocument(list: FileList | null) {
+    if (!list?.length || !project) return;
+    const file = list[0];
+    setNotice("Belge okunuyor…");
+    try {
+      const text = file.type === "application/pdf" ? await extractPdfText(file) : await file.text();
+      const scenes = planFromText(text, { tone: "educational", maxScenes: 16 });
+      if (scenes.length === 0) throw new Error("Belgeden sahne çıkarılamadı.");
+      setScenes([...project.scenes, ...scenes]);
+      setNotice(`${scenes.length} sahne eklendi.`);
+    } catch (err) {
+      setNotice(`Belge okunamadı: ${err instanceof Error ? err.message : "bilinmeyen hata"}`);
+    }
+  }
+
+  async function detachAsset(asset: Asset) {
+    if (!project) return;
+    await deleteAsset(asset.id);
+    const nextAssets = assets.filter((a) => a.id !== asset.id);
+    setAssets(nextAssets);
+    setMedia(await loadMedia(nextAssets));
+    patch((p) => ({
+      ...p,
+      audioAssetId: p.audioAssetId === asset.id ? undefined : p.audioAssetId,
+      scenes: p.scenes.map((s) =>
+        s.assetId === asset.id ? { ...s, assetId: undefined, kind: "text" as const } : s
+      ),
+    }));
+  }
+
+  /* ── AI sohbet ── */
+
+  async function sendChat() {
+    const message = chatInput.trim();
+    if (!message || !project || aiBusy) return;
     setChatInput("");
-    setChatMessages((prev) => [...prev, { id: Date.now().toString(), role: "user", content: userMsg }]);
-    setAiSending(true);
+    setAiBusy(true);
+
+    const userMsg = { id: newId("msg"), role: "user" as const, content: message, createdAt: new Date().toISOString() };
+    patch((p) => ({ ...p, chat: [...p.chat, userMsg] }));
+
+    let reply = "";
+    let nextScenes: Scene[] | null = null;
 
     try {
       const res = await fetch("/api/ai/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, message: userMsg, currentScenes: scenes }),
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          message,
+          scenes: project.scenes.map((s) => ({
+            subtitle: s.subtitle,
+            duration: s.duration,
+            motion: s.motion,
+            transition: s.transition,
+            palette: s.palette ?? "violet",
+          })),
+        }),
       });
-      const data = await res.json();
-      if (data.aiReply) {
-        setChatMessages((prev) => [
-          ...prev,
-          { id: (Date.now() + 1).toString(), role: "assistant", content: data.aiReply },
-        ]);
+
+      if (res.ok) {
+        const data = (await res.json()) as {
+          reply: string;
+          changeScenes: boolean;
+          scenes: Array<{ subtitle: string; duration: number; motion: Motion; transition: Transition; palette: string }>;
+        };
+        reply = data.reply;
+        if (data.changeScenes && data.scenes.length > 0) {
+          nextScenes = data.scenes.map((s, i) => ({
+            id: project.scenes[i]?.id ?? newId("sc"),
+            kind: project.scenes[i]?.assetId ? project.scenes[i].kind : "text",
+            assetId: project.scenes[i]?.assetId,
+            duration: Math.min(20, Math.max(1, s.duration)),
+            motion: s.motion,
+            transition: s.transition,
+            subtitle: s.subtitle,
+            palette: s.palette,
+          }));
+        }
+      } else {
+        // Sunucuda AI yoksa (503) veya hata varsa yerel planlayıcıya düş.
+        const local = applyCommand(message, project.scenes, project.subtitleStyle);
+        reply =
+          res.status === 503
+            ? `${local.reply}\n\n(Yerel planlayıcı kullanıldı — sunucuda AI anahtarı tanımlı değil.)`
+            : `${local.reply}\n\n(AI sunucusu hata verdi: HTTP ${res.status}. Yerel planlayıcı kullanıldı.)`;
+        if (local.scenes) nextScenes = local.scenes;
+        if (local.subtitleStyle) patch((p) => ({ ...p, subtitleStyle: local.subtitleStyle! }));
       }
-      if (data.updatedScenes && data.updatedScenes.length > 0) {
-        setScenes(data.updatedScenes);
-      }
-    } catch (err) {
-      console.error("AI send error:", err);
-    } finally {
-      setAiSending(false);
+    } catch {
+      const local = applyCommand(message, project.scenes, project.subtitleStyle);
+      reply = `${local.reply}\n\n(Ağ hatası — yerel planlayıcı kullanıldı.)`;
+      if (local.scenes) nextScenes = local.scenes;
+      if (local.subtitleStyle) patch((p) => ({ ...p, subtitleStyle: local.subtitleStyle! }));
     }
-  };
 
-  // Process Text / PDF / Video Sources
-  const handleProcessText = async () => {
-    if (!textSource.trim() || sourceLoading) return;
-    setSourceLoading(true);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/sources`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "text", content: textSource }),
-      });
-      const data = await res.json();
-      if (data.generatedScenes) {
-        setScenes(data.generatedScenes);
-        setActiveTab("scenes");
-      }
-    } catch (err) {
-      console.error("Source process error:", err);
-    } finally {
-      setSourceLoading(false);
+    const aiMsg = { id: newId("msg"), role: "assistant" as const, content: reply, createdAt: new Date().toISOString() };
+    if (nextScenes) {
+      const scenes = nextScenes;
+      patch((p) => ({
+        ...p,
+        chat: [...p.chat, aiMsg],
+        scenes,
+        versions: [
+          { label: "AI öncesi", createdAt: new Date().toISOString(), scenes: p.scenes },
+          ...p.versions,
+        ].slice(0, 10),
+      }));
+    } else {
+      patch((p) => ({ ...p, chat: [...p.chat, aiMsg] }));
     }
-  };
+    setAiBusy(false);
+  }
 
-  const handleProcessFileSource = async (file: File) => {
-    setSourceLoading(true);
-    const formData = new FormData();
-    formData.append("file", file);
-    try {
-      const res = await fetch(`/api/projects/${projectId}/sources`, {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
-      if (data.generatedScenes) {
-        setScenes(data.generatedScenes);
-        setActiveTab("scenes");
-      }
-    } catch (err) {
-      console.error("File source process error:", err);
-    } finally {
-      setSourceLoading(false);
+  function restoreVersion(index: number) {
+    if (!project) return;
+    const version = project.versions[index];
+    if (!version) return;
+    patch((p) => ({ ...p, scenes: version.scenes, versions: p.versions.filter((_, i) => i !== index) }));
+    setNotice("Önceki sürüm geri yüklendi.");
+  }
+
+  /* ── Render ── */
+
+  async function render() {
+    if (!project) return;
+    setRenderError("");
+    setNotice("");
+    setPlaying(false);
+    if (project.scenes.length === 0) {
+      setRenderError("Önce en az bir sahne ekle.");
+      return;
     }
-  };
+    if (!isSupported()) {
+      setRenderError(
+        "Bu tarayıcı video kaydını (MediaRecorder + canvas.captureStream) desteklemiyor. Chrome, Edge veya güncel Safari deneyin."
+      );
+      return;
+    }
 
-  // Upload images
-  const handleUpload = async (files: FileList) => {
-    setUploading(true);
-    const formData = new FormData();
-    Array.from(files).forEach((f) => formData.append("files", f));
+    cancelRef.current = { cancelled: false };
+    setRecording(true);
+    setProgress(0);
+    if (output) URL.revokeObjectURL(output.url);
+    setOutput(null);
 
     try {
-      await fetch(`/api/projects/${projectId}/upload`, {
-        method: "POST",
-        body: formData,
+      const audioAsset = project.audioAssetId ? assets.find((a) => a.id === project.audioAssetId) : undefined;
+      const result = await recordVideo({
+        project,
+        media,
+        audio: audioAsset?.blob,
+        signal: cancelRef.current,
+        onProgress: (ratio) => setProgress(Math.min(1, ratio)),
       });
-      const projRes = await fetch(`/api/projects/${projectId}`);
-      const projData = await projRes.json();
-      setAssets(projData.assets ?? []);
+      setOutput({
+        url: URL.createObjectURL(result.blob),
+        ext: result.ext,
+        sizeMB: Math.round((result.blob.size / 1024 / 1024) * 100) / 100,
+      });
+      setProgress(1);
     } catch (err) {
-      console.error("Upload error:", err);
+      setRenderError(err instanceof Error ? err.message : "Render başarısız.");
     } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      setRecording(false);
     }
-  };
+  }
 
-  // Save + Render
-  const handleRender = async () => {
-    setRenderStatus("SAVING");
-    setRenderError(null);
+  useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
 
-    try {
-      await fetch(`/api/projects/${projectId}/scenes`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenes }),
-      });
+  /* ── Görünüm ── */
 
-      setRenderStatus("RENDERING");
-      const res = await fetch("/api/render", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, scenes }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Render başarısız");
-
-      setRenderStatus("COMPLETED");
-      if (data.videoUrl) setVideoUrl(data.videoUrl);
-    } catch (err) {
-      setRenderStatus("FAILED");
-      setRenderError(err instanceof Error ? err.message : "Render hatası");
-    }
-  };
-
-  const totalSeconds = scenes.reduce((acc, s) => acc + Math.round(s.durationInFrames / 30), 0);
-
-  if (loadingProject) {
+  if (loadError) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="w-10 h-10 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
-      </div>
+      <>
+        <TopBar />
+        <main className="shell" style={{ maxWidth: 620 }}>
+          <div className="notice notice-error" style={{ marginTop: 40 }}>
+            {loadError}
+          </div>
+          <div className="row" style={{ marginTop: 16 }}>
+            <Link href="/projects" className="btn">
+              Projelerim
+            </Link>
+            <Link href="/new" className="btn btn-primary">
+              Yeni proje
+            </Link>
+          </div>
+        </main>
+      </>
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gray-950 text-white flex flex-col">
-      {/* ── Header ── */}
-      <header
-        className="flex items-center justify-between px-5 py-3 border-b"
-        style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(0,0,0,0.4)" }}
-      >
-        <div className="flex items-center gap-3">
-          <Link href="/projects" className="text-gray-500 hover:text-white text-sm transition-colors">
-            ← Projeler
-          </Link>
-          <span className="text-gray-700">/</span>
-          <span className="font-bold text-sm truncate max-w-[200px]">
-            {project?.name ?? projectId}
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Quick presets */}
-          {["⚡ Tempolu Reels", "🎓 Ders Anlatımı", "✨ Sakin & Premium"].map((preset) => (
-            <button
-              key={preset}
-              onClick={() => {
-                setChatInput(preset);
-              }}
-              className="text-xs px-2.5 py-1 rounded-full text-violet-300 bg-violet-500/10 border border-violet-500/20 hover:bg-violet-500/20 transition-all"
-            >
-              {preset}
-            </button>
-          ))}
-          <span className="text-xs text-gray-600">
-            {scenes.length} sahne · {totalSeconds}s
-          </span>
-        </div>
-      </header>
+  if (!project) {
+    return (
+      <>
+        <TopBar />
+        <main className="shell">
+          <div className="muted" style={{ marginTop: 40 }}>
+            Proje yükleniyor…
+          </div>
+        </main>
+      </>
+    );
+  }
 
-      {/* ── Body ── */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* ── Left Sidebar Tabs ── */}
-        <aside
-          className="w-80 flex flex-col border-r overflow-hidden"
-          style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(0,0,0,0.2)" }}
-        >
-          {/* Tab selector */}
-          <div className="flex border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-            <button
-              onClick={() => setActiveTab("ai")}
-              className={`flex-1 py-3 text-xs font-bold transition-colors ${
-                activeTab === "ai"
-                  ? "text-violet-400 border-b-2 border-violet-500 bg-violet-500/5"
-                  : "text-gray-500 hover:text-gray-300"
-              }`}
-            >
-              🤖 AI Asistan
-            </button>
-            <button
-              onClick={() => setActiveTab("scenes")}
-              className={`flex-1 py-3 text-xs font-bold transition-colors ${
-                activeTab === "scenes"
-                  ? "text-violet-400 border-b-2 border-violet-500 bg-violet-500/5"
-                  : "text-gray-500 hover:text-gray-300"
-              }`}
-            >
-              🎬 Sahneler ({scenes.length})
-            </button>
-            <button
-              onClick={() => setActiveTab("source")}
-              className={`flex-1 py-3 text-xs font-bold transition-colors ${
-                activeTab === "source"
-                  ? "text-violet-400 border-b-2 border-violet-500 bg-violet-500/5"
-                  : "text-gray-500 hover:text-gray-300"
-              }`}
-            >
-              📄 Kaynak / PDF
-            </button>
+  const current = project.scenes[selected];
+
+  return (
+    <>
+      <TopBar />
+      <div className="editor">
+        {/* Sol: önizleme + render */}
+        <div className="editor-col stack">
+          <div className="preview-frame">
+            <canvas ref={canvasRef} width={VIDEO_WIDTH} height={VIDEO_HEIGHT} />
           </div>
 
-          {/* TAB 1: AI Chat */}
-          {activeTab === "ai" && (
-            <div className="flex-1 flex flex-col justify-between overflow-hidden p-3">
-              <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-                {chatMessages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex flex-col text-xs p-3 rounded-xl max-w-[92%] fade-in ${
-                      msg.role === "user"
-                        ? "ml-auto bg-violet-600 text-white rounded-br-none"
-                        : "mr-auto bg-gray-800 text-gray-200 border border-gray-700/50 rounded-bl-none"
-                    }`}
-                  >
-                    <span className="font-bold mb-1 opacity-60">
-                      {msg.role === "user" ? "Sen" : "🤖 CinoVidyo AI"}
-                    </span>
-                    <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                  </div>
-                ))}
-                {aiSending && (
-                  <div className="flex items-center gap-2 text-xs text-violet-400 p-2">
-                    <span className="w-2 h-2 bg-violet-400 rounded-full animate-ping" />
-                    AI kurguyu planlıyor...
-                  </div>
-                )}
-                <div ref={chatBottomRef} />
-              </div>
-
-              {/* Chat Input */}
-              <form onSubmit={handleSendChat} className="mt-2 flex gap-2">
-                <input
-                  type="text"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="AI'a ne istediğini anlat..."
-                  className="flex-1 bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-xs text-white placeholder-gray-600 focus:border-violet-500 outline-none"
-                />
-                <button
-                  type="submit"
-                  disabled={aiSending}
-                  className="btn-glow px-3 py-2 rounded-xl text-xs font-bold"
-                >
-                  Gönder
-                </button>
-              </form>
-            </div>
-          )}
-
-          {/* TAB 2: Scenes & Media Upload */}
-          {activeTab === "scenes" && (
-            <div className="flex-1 flex flex-col overflow-y-auto p-3">
-              {/* Upload section */}
-              <div className="mb-4 pb-3 border-b border-gray-800">
-                <p className="text-xs font-bold text-gray-400 mb-2 uppercase tracking-wider">
-                  Görseller / Medyalar ({assets.length}/5)
-                </p>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => e.target.files && handleUpload(e.target.files)}
-                />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading || assets.length >= 5}
-                  className="w-full py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-2"
-                  style={{
-                    background: "rgba(124,58,237,0.1)",
-                    border: "1px dashed rgba(124,58,237,0.4)",
-                    color: assets.length >= 5 ? "#6b7280" : "#a78bfa",
-                  }}
-                >
-                  {uploading ? "Yükleniyor..." : "📷 Görsel Yükle"}
-                </button>
-              </div>
-
-              {/* Scene List */}
-              <div className="flex justify-between items-center mb-3">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                  Sahneler
-                </p>
-                <button onClick={addScene} className="text-xs text-violet-400 hover:underline">
-                  + Sahne Ekle
-                </button>
-              </div>
-
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleDragEnd}
-              >
-                <SortableContext items={scenes.map((s) => s.id)} strategy={verticalListSortingStrategy}>
-                  {scenes.map((scene, i) => (
-                    <div key={scene.id} className="relative group">
-                      <SortableScene scene={scene} index={i} assets={assets} onChange={updateScene} />
-                      {scenes.length > 1 && (
-                        <button
-                          onClick={() => removeScene(scene.id)}
-                          className="absolute top-2 right-2 text-gray-600 hover:text-red-400 text-xs opacity-0 group-hover:opacity-100"
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </SortableContext>
-              </DndContext>
-            </div>
-          )}
-
-          {/* TAB 3: Text / PDF / Video Input */}
-          {activeTab === "source" && (
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-gray-300 mb-2">
-                  📝 Metin veya Hikaye Yapıştır
-                </label>
-                <textarea
-                  rows={5}
-                  value={textSource}
-                  onChange={(e) => setTextSource(e.target.value)}
-                  placeholder="Metin veya hikayenizi buraya yapıştırın. AI cümleleri otomatik sahnelere bölecektir..."
-                  className="w-full bg-gray-900 border border-gray-700 rounded-xl p-3 text-xs text-white placeholder-gray-600 focus:border-violet-500 outline-none"
-                />
-                <button
-                  onClick={handleProcessText}
-                  disabled={sourceLoading || !textSource.trim()}
-                  className="btn-glow w-full mt-2 py-2.5 rounded-xl text-xs font-bold"
-                >
-                  {sourceLoading ? "İşleniyor..." : "✨ Metinden Sahneler Üret"}
-                </button>
-              </div>
-
-              <div className="pt-3 border-t border-gray-800">
-                <label className="block text-xs font-bold text-gray-300 mb-2">
-                  📄 PDF Ders Notu veya Hazır Video
-                </label>
-                <input
-                  ref={sourceFileRef}
-                  type="file"
-                  accept="application/pdf,video/mp4,video/webm"
-                  className="hidden"
-                  onChange={(e) => e.target.files?.[0] && handleProcessFileSource(e.target.files[0])}
-                />
-                <button
-                  onClick={() => sourceFileRef.current?.click()}
-                  disabled={sourceLoading}
-                  className="w-full py-3 rounded-xl text-xs font-semibold border border-dashed border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-all flex flex-col items-center gap-1"
-                >
-                  <span>📄 PDF Belgesi veya 📹 Hazır Video Yükle</span>
-                  <span className="text-[10px] text-gray-400">PDF ders özetine veya hazır videoya dönüştürür</span>
-                </button>
-              </div>
-            </div>
-          )}
-        </aside>
-
-        {/* ── Main Preview Area ── */}
-        <main className="flex-1 flex flex-col items-center justify-center p-6 gap-6">
-          <div
-            className="relative rounded-2xl overflow-hidden flex items-center justify-center"
-            style={{
-              width: 270,
-              height: 480,
-              background: "linear-gradient(145deg, #111827 0%, #030712 100%)",
-              border: "2px solid rgba(255,255,255,0.06)",
-              boxShadow: "0 0 60px rgba(124,58,237,0.15)",
-            }}
-          >
-            {renderStatus === "COMPLETED" && videoUrl ? (
-              <video src={videoUrl} controls autoPlay loop className="w-full h-full object-contain" />
-            ) : renderStatus === "RENDERING" || renderStatus === "SAVING" ? (
-              <div className="flex flex-col items-center gap-3">
-                <div className="w-12 h-12 border-2 border-violet-500/20 border-t-violet-500 rounded-full animate-spin" />
-                <p className="text-sm text-gray-400 loading-pulse">
-                  {renderStatus === "SAVING" ? "Kaydediliyor..." : "Render ediliyor..."}
-                </p>
-                <p className="text-xs text-gray-600">Remotion motoru MP4 üretiyor</p>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-3 text-center px-6">
-                <div className="text-5xl opacity-20">🎬</div>
-                <p className="text-sm text-gray-500">{scenes.length} sahne · {totalSeconds}s</p>
-                <p className="text-xs text-gray-600">
-                  AI Asistan ile sohbet edin veya sahnelere görsel yükleyin
-                </p>
-              </div>
-            )}
-
-            <span
-              className="absolute top-2 left-2 text-xs font-bold px-2 py-0.5 rounded-full"
-              style={{ background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.1)", color: "#6b7280" }}
+          <div className="row">
+            <button className="btn btn-sm" onClick={() => setPlaying((v) => !v)} disabled={total === 0}>
+              {playing ? "⏸ Durdur" : "▶ Oynat"}
+            </button>
+            <button
+              className="btn btn-sm"
+              onClick={() => {
+                setPlaying(false);
+                setTime(0);
+              }}
             >
-              9:16
+              ⏮ Başa
+            </button>
+            <span className="tiny">
+              {time.toFixed(1)} / {total.toFixed(1)} sn
             </span>
           </div>
 
-          {renderStatus === "FAILED" && renderError && (
-            <div className="max-w-xs text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded-xl px-4 py-3 text-center">
-              ⚠️ {renderError}
+          <input
+            type="range"
+            className="range"
+            min={0}
+            max={Math.max(0.1, total)}
+            step={0.05}
+            value={Math.min(time, total)}
+            onChange={(e) => {
+              setPlaying(false);
+              setTime(Number(e.target.value));
+            }}
+          />
+
+          {!supported && (
+            <div className="notice notice-error">
+              Bu tarayıcı video kaydını desteklemiyor. Önizleme çalışır, ancak dosya üretemezsin —
+              Chrome veya Edge dene.
             </div>
           )}
 
-          <button
-            onClick={handleRender}
-            disabled={renderStatus === "RENDERING" || renderStatus === "SAVING"}
-            className="btn-glow px-10 py-4 rounded-full font-bold text-lg min-w-[220px]"
-          >
-            {renderStatus === "RENDERING"
-              ? "⏳ Render Ediliyor..."
-              : renderStatus === "SAVING"
-              ? "💾 Kaydediliyor..."
-              : renderStatus === "COMPLETED"
-              ? "🔄 Tekrar Render Et"
-              : "▶ Videoyu Render Et"}
+          <button className="btn btn-primary btn-lg" onClick={render} disabled={recording}>
+            {recording ? (
+              <>
+                <span className="spin" /> Kaydediliyor… %{Math.round(progress * 100)}
+              </>
+            ) : (
+              "🎬 Videoyu üret"
+            )}
           </button>
 
-          {renderStatus === "COMPLETED" && videoUrl && (
-            <a href={videoUrl} download="output.mp4" className="flex items-center gap-2 text-violet-400 font-semibold">
-              ⬇️ Gerçek MP4 İndir
-            </a>
+          {recording && (
+            <>
+              <div className="progress">
+                <div style={{ width: `${progress * 100}%` }} />
+              </div>
+              <p className="tiny">
+                Kayıt gerçek zamanlı: yaklaşık {total.toFixed(0)} saniye sürecek. Bu sekmeyi açık
+                bırak.
+              </p>
+              <button
+                className="btn btn-sm btn-danger"
+                onClick={() => {
+                  cancelRef.current.cancelled = true;
+                }}
+              >
+                İptal et
+              </button>
+            </>
           )}
-        </main>
+
+          {renderError && <div className="notice notice-error">{renderError}</div>}
+
+          {output && (
+            <div className="card stack fade-in" style={{ gap: 10 }}>
+              <div className="row">
+                <span className="badge badge-ok">Video hazır</span>
+                <span className="tiny">
+                  {output.ext.toUpperCase()} · {output.sizeMB} MB
+                </span>
+              </div>
+              <video src={output.url} controls playsInline style={{ width: "100%", borderRadius: 12 }} />
+              <a
+                className="btn btn-primary"
+                href={output.url}
+                download={`${project.name.replace(/[^\w\s-]/g, "").trim() || "cinovid"}.${output.ext}`}
+              >
+                ⬇ İndir
+              </a>
+              {output.ext === "webm" && (
+                <p className="tiny">
+                  Tarayıcın MP4 kaydını desteklemediği için WebM üretildi. WebM&apos;i Instagram/TikTok
+                  için MP4&apos;e çevirmen gerekebilir.
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="card">
+            <div className="label">Kalite analizi</div>
+            <div className="row" style={{ gap: 8, marginBottom: 8 }}>
+              <span className="badge">Hook {report.hook}/10</span>
+              <span className="badge">Tempo {report.tempo}/10</span>
+              <span className="badge">Altyazı {report.subtitle}/10</span>
+              <span className={`badge ${report.overall >= 8 ? "badge-ok" : "badge-warn"}`}>
+                Genel {report.overall}/10
+              </span>
+            </div>
+            <ul className="tiny" style={{ paddingLeft: 16, lineHeight: 1.7 }}>
+              {report.notes.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        {/* Orta: sahneler */}
+        <div className="stack">
+          <div className="row">
+            <input
+              className="input"
+              style={{ maxWidth: 320, fontWeight: 700 }}
+              value={project.name}
+              onChange={(e) => patch((p) => ({ ...p, name: e.target.value }))}
+            />
+            <div className="spacer" />
+            <span className="badge">
+              {project.scenes.length} sahne · {total.toFixed(1)} sn
+            </span>
+          </div>
+
+          {notice && <div className="notice">{notice}</div>}
+
+          <div className="row">
+            <button className="btn btn-sm" onClick={addTextScene}>
+              + Metin sahnesi
+            </button>
+            <button className="btn btn-sm" onClick={() => imageInput.current?.click()}>
+              + Görsel
+            </button>
+            <button className="btn btn-sm" onClick={() => videoInput.current?.click()}>
+              + Video
+            </button>
+            <button className="btn btn-sm" onClick={() => docInput.current?.click()}>
+              + PDF / metin dosyası
+            </button>
+          </div>
+
+          <input
+            ref={imageInput}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => void uploadMedia(e.target.files, "image")}
+          />
+          <input
+            ref={videoInput}
+            type="file"
+            accept="video/*"
+            className="hidden"
+            onChange={(e) => void uploadMedia(e.target.files, "video")}
+          />
+          <input
+            ref={audioInput}
+            type="file"
+            accept="audio/*"
+            className="hidden"
+            onChange={(e) => void uploadMedia(e.target.files, "audio")}
+          />
+          <input
+            ref={docInput}
+            type="file"
+            accept="application/pdf,text/plain,.md"
+            className="hidden"
+            onChange={(e) => void importDocument(e.target.files)}
+          />
+
+          <div className="stack" style={{ gap: 8 }}>
+            {project.scenes.length === 0 && (
+              <div className="card muted">
+                Henüz sahne yok. Yukarıdan sahne ekle veya sağdaki AI asistana ne istediğini yaz.
+              </div>
+            )}
+            {project.scenes.map((scene, i) => {
+              const asset = scene.assetId ? assets.find((a) => a.id === scene.assetId) : undefined;
+              const el = scene.assetId ? media.get(scene.assetId) : undefined;
+              return (
+                <div
+                  key={scene.id}
+                  className={`scene-item ${i === selected ? "active" : ""}`}
+                  onClick={() => {
+                    setSelected(i);
+                    setPlaying(false);
+                    setTime(timeline[i]?.start ?? 0);
+                  }}
+                >
+                  <div className="scene-index">{i + 1}</div>
+                  {el instanceof HTMLImageElement ? (
+                    // Blob URL önizlemeleri Next/Image optimizasyon hattından geçirilemez.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img className="thumb" src={el.src} alt="" />
+                  ) : (
+                    <div className="thumb" style={{ display: "grid", placeItems: "center", fontSize: 18 }}>
+                      {scene.kind === "video" ? "🎬" : "T"}
+                    </div>
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.45 }}>
+                      {scene.subtitle || <span className="muted">(altyazı yok)</span>}
+                    </div>
+                    <div className="tiny" style={{ marginTop: 4 }}>
+                      {scene.duration.toFixed(1)} sn · {MOTION_LABELS[scene.motion]} ·{" "}
+                      {scene.transition === "fade" ? "yumuşak geçiş" : "sert kesme"}
+                      {asset ? ` · ${asset.name}` : ""}
+                    </div>
+                  </div>
+                  <div className="stack" style={{ gap: 4 }}>
+                    <button
+                      className="btn btn-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        moveScene(i, -1);
+                      }}
+                      disabled={i === 0}
+                      aria-label="Yukarı taşı"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      className="btn btn-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        moveScene(i, 1);
+                      }}
+                      disabled={i === project.scenes.length - 1}
+                      aria-label="Aşağı taşı"
+                    >
+                      ↓
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {current && (
+            <div className="card stack fade-in">
+              <div className="row">
+                <span className="h2">Sahne {selected + 1}</span>
+                <div className="spacer" />
+                <button className="btn btn-sm btn-danger" onClick={() => removeScene(selected)}>
+                  Sahneyi sil
+                </button>
+              </div>
+
+              <div>
+                <label className="label" htmlFor="sub">
+                  Altyazı / ekran metni
+                </label>
+                <textarea
+                  id="sub"
+                  className="textarea"
+                  style={{ minHeight: 80 }}
+                  value={current.subtitle}
+                  onChange={(e) => updateScene(selected, { subtitle: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="label">Süre: {current.duration.toFixed(1)} saniye</label>
+                <input
+                  type="range"
+                  className="range"
+                  min={1}
+                  max={20}
+                  step={0.5}
+                  value={current.duration}
+                  onChange={(e) => updateScene(selected, { duration: Number(e.target.value) })}
+                />
+              </div>
+
+              <div className="grid grid-3">
+                <div>
+                  <label className="label" htmlFor="mot">
+                    Hareket
+                  </label>
+                  <select
+                    id="mot"
+                    className="select"
+                    value={current.motion}
+                    onChange={(e) => updateScene(selected, { motion: e.target.value as Motion })}
+                  >
+                    {(Object.keys(MOTION_LABELS) as Motion[]).map((m) => (
+                      <option key={m} value={m}>
+                        {MOTION_LABELS[m]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label" htmlFor="tr">
+                    Geçiş
+                  </label>
+                  <select
+                    id="tr"
+                    className="select"
+                    value={current.transition}
+                    onChange={(e) => updateScene(selected, { transition: e.target.value as Transition })}
+                  >
+                    <option value="fade">Yumuşak (fade)</option>
+                    <option value="cut">Sert kesme</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="label" htmlFor="pal">
+                    Renk teması
+                  </label>
+                  <select
+                    id="pal"
+                    className="select"
+                    value={current.palette ?? "violet"}
+                    onChange={(e) => updateScene(selected, { palette: e.target.value })}
+                  >
+                    {PALETTE_KEYS.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              {current.assetId && (
+                <p className="tiny">
+                  Renk teması yalnızca görselsiz (metin) sahnelerde görünür.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Sağ: AI / stil / medya */}
+        <div className="editor-col stack">
+          <div className="tabs">
+            <button className={`tab ${tab === "ai" ? "active" : ""}`} onClick={() => setTab("ai")}>
+              AI asistan
+            </button>
+            <button className={`tab ${tab === "style" ? "active" : ""}`} onClick={() => setTab("style")}>
+              Altyazı
+            </button>
+            <button className={`tab ${tab === "media" ? "active" : ""}`} onClick={() => setTab("media")}>
+              Medya
+            </button>
+          </div>
+
+          {tab === "ai" && (
+            <div className="card stack">
+              <div className="chat">
+                {project.chat.length === 0 && (
+                  <div className="bubble bubble-ai">
+                    Merhaba! Ne tür bir video istiyorsun? Örnek komutlar:{"\n"}• “30 saniye olsun”
+                    {"\n"}• “Reels için tempolu yap”{"\n"}• “altyazıyı sarı yap”{"\n"}• “son sahneyi
+                    sil”{"\n"}• “2. sahne: yeni metin”{"\n"}Uzun bir metin yapıştırırsan onu
+                    sahnelere bölerim.
+                  </div>
+                )}
+                {project.chat.map((m) => (
+                  <div key={m.id} className={`bubble ${m.role === "user" ? "bubble-user" : "bubble-ai"}`}>
+                    {m.content}
+                  </div>
+                ))}
+                {aiBusy && (
+                  <div className="bubble bubble-ai">
+                    <span className="spin" style={{ display: "inline-block", verticalAlign: "-2px" }} />{" "}
+                    düşünüyor…
+                  </div>
+                )}
+              </div>
+
+              <textarea
+                className="textarea"
+                style={{ minHeight: 76 }}
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) void sendChat();
+                }}
+                placeholder="Ne yapmamı istersin? (Ctrl+Enter ile gönder)"
+              />
+              <button className="btn btn-primary" onClick={() => void sendChat()} disabled={aiBusy}>
+                Gönder
+              </button>
+
+              {project.versions.length > 0 && (
+                <>
+                  <div className="label" style={{ marginTop: 6 }}>
+                    Sürüm geçmişi
+                  </div>
+                  <div className="stack" style={{ gap: 6 }}>
+                    {project.versions.slice(0, 5).map((v, i) => (
+                      <button key={v.createdAt + i} className="btn btn-sm" onClick={() => restoreVersion(i)}>
+                        ↩ {v.label} · {v.scenes.length} sahne
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {tab === "style" && (
+            <div className="card stack">
+              <div>
+                <label className="label">Altyazı rengi</label>
+                <div className="row" style={{ gap: 8 }}>
+                  {SUB_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      aria-label={`Renk ${c}`}
+                      onClick={() =>
+                        patch((p) => ({ ...p, subtitleStyle: { ...p.subtitleStyle, color: c } }))
+                      }
+                      style={{
+                        width: 30,
+                        height: 30,
+                        borderRadius: 9,
+                        background: c,
+                        cursor: "pointer",
+                        border:
+                          project.subtitleStyle.color === c
+                            ? "2px solid #fff"
+                            : "1px solid rgba(255,255,255,0.2)",
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="label">Punto: {project.subtitleStyle.size}px</label>
+                <input
+                  type="range"
+                  className="range"
+                  min={28}
+                  max={96}
+                  step={2}
+                  value={project.subtitleStyle.size}
+                  onChange={(e) =>
+                    patch((p) => ({
+                      ...p,
+                      subtitleStyle: { ...p.subtitleStyle, size: Number(e.target.value) },
+                    }))
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="label" htmlFor="pos">
+                  Konum
+                </label>
+                <select
+                  id="pos"
+                  className="select"
+                  value={project.subtitleStyle.position}
+                  onChange={(e) =>
+                    patch((p) => ({
+                      ...p,
+                      subtitleStyle: {
+                        ...p.subtitleStyle,
+                        position: e.target.value as "top" | "center" | "bottom",
+                      },
+                    }))
+                  }
+                >
+                  <option value="top">Üst</option>
+                  <option value="center">Orta</option>
+                  <option value="bottom">Alt</option>
+                </select>
+              </div>
+
+              <label className="row" style={{ gap: 8, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={project.subtitleStyle.background}
+                  onChange={(e) =>
+                    patch((p) => ({
+                      ...p,
+                      subtitleStyle: { ...p.subtitleStyle, background: e.target.checked },
+                    }))
+                  }
+                />
+                <span style={{ fontSize: 14 }}>Altyazı arkasına koyu zemin</span>
+              </label>
+
+              <button
+                className="btn btn-sm"
+                onClick={() => patch((p) => ({ ...p, subtitleStyle: { ...DEFAULT_SUBTITLE_STYLE } }))}
+              >
+                Varsayılana dön
+              </button>
+            </div>
+          )}
+
+          {tab === "media" && (
+            <div className="card stack">
+              <div className="row">
+                <button className="btn btn-sm" onClick={() => audioInput.current?.click()}>
+                  🎵 Arka plan müziği ekle
+                </button>
+              </div>
+              {project.audioAssetId ? (
+                <div className="notice notice-ok">
+                  Müzik: {assets.find((a) => a.id === project.audioAssetId)?.name ?? "seçili"} — video
+                  boyunca döner.
+                </div>
+              ) : (
+                <p className="tiny">
+                  Müzik eklersen kayda ses kanalı olarak eklenir. Seslendirme (TTS) henüz yok — bu
+                  sürümde ses yalnızca yüklediğin dosyadan gelir.
+                </p>
+              )}
+
+              <div className="label" style={{ marginTop: 6 }}>
+                Yüklenen dosyalar ({assets.length})
+              </div>
+              {assets.length === 0 && <p className="tiny">Henüz dosya yok.</p>}
+              <div className="stack" style={{ gap: 6 }}>
+                {assets.map((a) => (
+                  <div key={a.id} className="row" style={{ gap: 8 }}>
+                    <span className="badge">{a.kind}</span>
+                    <span className="tiny" style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {a.name}
+                    </span>
+                    <button className="btn btn-sm btn-danger" onClick={() => void detachAsset(a)}>
+                      Sil
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

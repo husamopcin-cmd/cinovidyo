@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.ts",
   "scripts": {
-    "test": "npx tsx test.ts",
+    "test": "tsc && node dist/test.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

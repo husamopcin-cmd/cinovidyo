@@ -1,10 +1,9 @@
 import type { NextConfig } from "next";
 
+// CinoVid AI Studio istemci tarafında çalışır: sunucu veritabanı, disk yazımı
+// veya ağır render işi yoktur. Vercel/Netlify ücretsiz katmanına uygundur.
 const nextConfig: NextConfig = {
-  // better-sqlite3 sadece server-side çalışır
-  serverExternalPackages: ["better-sqlite3"],
-  // Standalone output: Railway için optimize
-  output: "standalone",
+  reactStrictMode: true,
 };
 
 export default nextConfig;

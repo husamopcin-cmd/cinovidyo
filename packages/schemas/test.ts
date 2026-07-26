@@ -1,5 +1,4 @@
-import { z } from "zod";
-import { projectSchema, assetSchema, sceneSchema } from "./index";
+import { projectSchema, assetSchema } from "./index";
 
 function runTests() {
   let passed = 0;
@@ -35,9 +34,9 @@ function runTests() {
     projectId: validProject.id,
     name: "test.pdf",
     url: "http://example.com/test.pdf",
-    mimeType: "application/pdf"
+    mimeType: "application/x-msdownload"
   };
-  assert(!assetSchema.safeParse(invalidAsset).success, "Desteklenmeyen dosya türü (PDF) reddedilmeli");
+  assert(!assetSchema.safeParse(invalidAsset).success, "Desteklenmeyen dosya türü reddedilmeli");
 
   console.log(`\nTest Sonuçları: ${passed} Başarılı, ${failed} Başarısız`);
   if (failed > 0) throw new Error("Tests failed");
