@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CinoVidyo — Yapay Zeka Destekli Video Stüdyosu",
+  title: "CinoVid AI Studio — Profesyonel AI Video Üretim & Kurgu Platformu",
   description:
-    "Görsellerinizden saniyeler içinde 9:16 dikey, altyazılı ve anlatımlı MP4 video oluşturun.",
+    "Metinlerinizden, PDF ders notlarınızdan ve görsellerinizden saniyeler içinde 9:16 dikey, anlatımlı MP4 videolar oluşturun.",
 };
 
 export default function RootLayout({

@@ -43,19 +43,19 @@ export default function Home() {
           🎬
         </div>
 
-        <h1 className="text-6xl font-black tracking-tight gradient-text">CinoVidyo</h1>
-        <p className="text-xl text-gray-400 text-center max-w-md leading-relaxed">
-          Görsellerinizden{" "}
+        <h1 className="text-6xl font-black tracking-tight gradient-text">CinoVid AI Studio</h1>
+        <p className="text-xl text-gray-400 text-center max-w-lg leading-relaxed">
+          Görsellerinizden, PDF ders notlarınızdan ve hikayelerinizden{" "}
           <span className="text-violet-400 font-semibold">saniyeler içinde</span>{" "}
-          9:16 dikey, altyazılı MP4 video oluşturun
+          9:16 dikey, anlatımlı MP4 video oluşturun
         </p>
 
         {/* Feature pills */}
         <div className="flex flex-wrap gap-2 justify-center mt-2">
-          {["Sürükle & Bırak", "Gerçek Render", "MP4 İndir", "9:16 Dikey"].map((f) => (
+          {["🤖 AI Chat Asistanı", "📄 PDF / Ders Notu", "📝 Hikaye → Video", "📹 Video Kurgu", "⚡ Remotion Render"].map((f) => (
             <span
               key={f}
-              className="px-3 py-1 rounded-full text-xs font-semibold"
+              className="px-3.5 py-1.5 rounded-full text-xs font-semibold"
               style={{
                 background: "rgba(124,58,237,0.15)",
                 border: "1px solid rgba(124,58,237,0.3)",
@@ -71,7 +71,7 @@ export default function Home() {
         <div className="flex gap-4 mt-8">
           <Link
             href="/projects"
-            className="px-6 py-3 rounded-xl font-semibold text-gray-300 hover:text-white transition-all duration-200"
+            className="px-6 py-3.5 rounded-xl font-semibold text-gray-300 hover:text-white transition-all duration-200"
             style={{
               background: "rgba(255,255,255,0.05)",
               border: "1px solid rgba(255,255,255,0.1)",
@@ -79,7 +79,7 @@ export default function Home() {
           >
             📁 Projelerim
           </Link>
-          <Link href="/new" className="btn-glow px-8 py-3 rounded-xl font-bold text-white">
+          <Link href="/new" className="btn-glow px-8 py-3.5 rounded-xl font-bold text-white">
             ✨ Yeni Video Oluştur
           </Link>
         </div>
@@ -92,13 +92,13 @@ export default function Home() {
           </div>
           <div className="w-px bg-gray-700" />
           <div>
-            <p className="text-2xl font-bold">5</p>
-            <p className="text-xs text-gray-500">Max Görsel</p>
+            <p className="text-2xl font-bold">AI Chat</p>
+            <p className="text-xs text-gray-500">Kişisel Asistan</p>
           </div>
           <div className="w-px bg-gray-700" />
           <div>
-            <p className="text-2xl font-bold">30s</p>
-            <p className="text-xs text-gray-500">Max Süre</p>
+            <p className="text-2xl font-bold">PDF / Metin</p>
+            <p className="text-xs text-gray-500">Çoklu Girdi</p>
           </div>
         </div>
       </div>
