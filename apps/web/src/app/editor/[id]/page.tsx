@@ -20,6 +20,7 @@ import {
   VIDEO_HEIGHT,
   VIDEO_WIDTH,
   newId,
+  totalDuration,
   type Asset,
   type Motion,
   type Project,
@@ -54,6 +55,7 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
 
   const [chatInput, setChatInput] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
+  const [pendingPlan, setPendingPlan] = useState<{ scenes: Scene[]; label: string } | null>(null);
 
   const [recording, setRecording] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -397,20 +399,27 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
 
     const aiMsg = { id: newId("msg"), role: "assistant" as const, content: reply, createdAt: new Date().toISOString() };
     if (nextScenes) {
-      const scenes = nextScenes;
-      patch((p) => ({
-        ...p,
-        chat: [...p.chat, aiMsg],
-        scenes,
-        versions: [
-          { label: "AI öncesi", createdAt: new Date().toISOString(), scenes: p.scenes },
-          ...p.versions,
-        ].slice(0, 10),
-      }));
+      setPendingPlan({ scenes: nextScenes, label: message.slice(0, 60) });
+      patch((p) => ({ ...p, chat: [...p.chat, aiMsg] }));
     } else {
       patch((p) => ({ ...p, chat: [...p.chat, aiMsg] }));
     }
     setAiBusy(false);
+  }
+
+  function applyPendingPlan() {
+    if (!pendingPlan) return;
+    const plan = pendingPlan;
+    patch((p) => ({
+      ...p,
+      scenes: plan.scenes,
+      versions: [
+        { label: "AI öncesi", createdAt: new Date().toISOString(), scenes: p.scenes },
+        ...p.versions,
+      ].slice(0, 10),
+    }));
+    setPendingPlan(null);
+    setNotice("Plan uygulandı. İstersen sürüm geçmişinden geri alabilirsin.");
   }
 
   function restoreVersion(index: number) {
@@ -895,6 +904,22 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
                   </div>
                 )}
               </div>
+
+              {pendingPlan && (
+                <div className="notice" style={{ display: "grid", gap: 10 }}>
+                  <div>
+                    <strong>Uygulamadan önce kontrol et</strong>
+                    <div className="tiny" style={{ marginTop: 4 }}>
+                      {pendingPlan.scenes.length} sahne · {totalDuration(pendingPlan.scenes).toFixed(1)} sn
+                      oluşturulacak. Mevcut kurgu sürüm geçmişine kaydedilecek.
+                    </div>
+                  </div>
+                  <div className="row">
+                    <button className="btn btn-sm btn-primary" onClick={applyPendingPlan}>Planı uygula</button>
+                    <button className="btn btn-sm" onClick={() => setPendingPlan(null)}>Vazgeç</button>
+                  </div>
+                </div>
+              )}
 
               <textarea
                 className="textarea"

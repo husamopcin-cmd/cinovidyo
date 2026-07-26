@@ -30,6 +30,41 @@ const TONES = [
   { id: "calm", label: "Sakin & sinematik" },
 ] as const;
 
+const TEMPLATES = [
+  {
+    id: "product",
+    icon: "✨",
+    title: "Ürün tanıtımı",
+    tone: "energetic" as const,
+    name: "Ürün tanıtım videosu",
+    text: "Ürünü güçlü bir açılışla tanıt. Çözdüğü problemi, en önemli üç faydasını, kullanım kolaylığını ve net bir harekete geçirici kapanışı anlat.",
+  },
+  {
+    id: "real-estate",
+    icon: "🏠",
+    title: "Emlak ilanı",
+    tone: "calm" as const,
+    name: "Emlak ilanı videosu",
+    text: "Evin dış cephesini, ferah salonunu, modern mutfağını, yatak odalarını ve konum avantajını premium bir dille tanıt. İletişim çağrısıyla bitir.",
+  },
+  {
+    id: "recipe",
+    icon: "🍽️",
+    title: "Yemek tarifi",
+    tone: "educational" as const,
+    name: "Yemek tarifi videosu",
+    text: "İştah açıcı sonuç görüntüsüyle başla. Malzemeleri, hazırlık adımlarını, pişirme püf noktasını ve servis önerisini kısa sahnelerle anlat.",
+  },
+  {
+    id: "education",
+    icon: "🎓",
+    title: "Hızlı eğitim",
+    tone: "educational" as const,
+    name: "Kısa eğitim videosu",
+    text: "Konuyu merak uyandıran bir soruyla aç. Temel bilgiyi üç anlaşılır adımda açıkla, kısa bir örnek ver ve uygulanabilir bir özetle bitir.",
+  },
+] as const;
+
 export default function NewProject() {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("text");
@@ -140,6 +175,33 @@ export default function NewProject() {
         <p className="lead" style={{ marginBottom: 22 }}>
           Kaynağını seç — sahneleri senin için kurayım, sonra editörde istediğin gibi değiştir.
         </p>
+
+        <div style={{ marginBottom: 22 }}>
+          <div className="label" style={{ marginBottom: 10 }}>Hazır profesyonel akışlar</div>
+          <div className="grid grid-2">
+            {TEMPLATES.map((template) => (
+              <button
+                key={template.id}
+                type="button"
+                className="card card-hover"
+                style={{ textAlign: "left", cursor: "pointer", padding: 16 }}
+                onClick={() => {
+                  setMode("text");
+                  setName(template.name);
+                  setText(template.text);
+                  setTone(template.tone);
+                  setTarget(30);
+                  setFiles([]);
+                  setError("");
+                }}
+              >
+                <div style={{ fontSize: 22, marginBottom: 6 }}>{template.icon}</div>
+                <div style={{ fontWeight: 800 }}>{template.title}</div>
+                <div className="tiny" style={{ marginTop: 4 }}>30 saniyelik düzenlenebilir sahne planı</div>
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="grid grid-2" style={{ marginBottom: 22 }}>
           {MODES.map((m) => (

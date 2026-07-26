@@ -103,6 +103,63 @@ export async function deleteAsset(id: string): Promise<void> {
   await tx(STORE_ASSETS, "readwrite", (s) => s.delete(id));
 }
 
+/* ── Taşınabilir proje yedeği ── */
+
+type ProjectBackup = {
+  format: "cinovid-project";
+  version: 1;
+  exportedAt: string;
+  project: Project;
+  assets: Array<Omit<Asset, "blob"> & { dataUrl: string }>;
+};
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error("Dosya yedeğe eklenemedi."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function dataUrlToBlob(dataUrl: string): Blob {
+  const [header, payload] = dataUrl.split(",", 2);
+  const mime = header.match(/^data:([^;]+)/)?.[1] ?? "application/octet-stream";
+  const bytes = Uint8Array.from(atob(payload), (char) => char.charCodeAt(0));
+  return new Blob([bytes], { type: mime });
+}
+
+export async function exportProjectBackup(id: string): Promise<Blob> {
+  const project = await getProject(id);
+  if (!project) throw new Error("Proje bulunamadı.");
+  const assets = await listAssets(id);
+  const packedAssets = await Promise.all(
+    assets.map(async ({ blob, ...asset }) => ({ ...asset, dataUrl: await blobToDataUrl(blob) }))
+  );
+  const backup: ProjectBackup = {
+    format: "cinovid-project",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    project,
+    assets: packedAssets,
+  };
+  return new Blob([JSON.stringify(backup)], { type: "application/json" });
+}
+
+export async function importProjectBackup(file: File): Promise<Project> {
+  const backup = JSON.parse(await file.text()) as Partial<ProjectBackup>;
+  if (backup.format !== "cinovid-project" || backup.version !== 1 || !backup.project) {
+    throw new Error("Bu dosya geçerli bir CinoVid proje yedeği değil.");
+  }
+  const project = backup.project;
+  await saveProject(project);
+  for (const packed of backup.assets ?? []) {
+    const { dataUrl, ...asset } = packed;
+    await putAsset({ ...asset, blob: dataUrlToBlob(dataUrl) });
+  }
+  return project;
+}
+
 /* ── Depolama kotası ── */
 
 export async function storageEstimate(): Promise<{ usedMB: number; quotaMB: number } | null> {

@@ -1,15 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import TopBar from "../../components/TopBar";
-import { deleteProject, listProjects, storageEstimate } from "../../lib/store";
+import {
+  deleteProject,
+  exportProjectBackup,
+  importProjectBackup,
+  listProjects,
+  storageEstimate,
+} from "../../lib/store";
 import { totalDuration, type Project } from "../../lib/types";
 
 export default function Projects() {
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [quota, setQuota] = useState<{ usedMB: number; quotaMB: number } | null>(null);
   const [error, setError] = useState("");
+  const importRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -36,6 +43,32 @@ export default function Projects() {
     }
   }
 
+  async function downloadBackup(p: Project) {
+    try {
+      const blob = await exportProjectBackup(p.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${p.name.replace(/[^\p{L}\p{N}-]+/gu, "-").toLowerCase() || "cinovid-proje"}.cinovid.json`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Yedek oluşturulamadı.");
+    }
+  }
+
+  async function restoreBackup(file: File | undefined) {
+    if (!file) return;
+    try {
+      await importProjectBackup(file);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Yedek içe aktarılamadı.");
+    } finally {
+      if (importRef.current) importRef.current.value = "";
+    }
+  }
+
   return (
     <>
       <TopBar />
@@ -45,6 +78,16 @@ export default function Projects() {
             Projelerim
           </h1>
           <div className="spacer" />
+          <button className="btn btn-sm" onClick={() => importRef.current?.click()}>
+            Yedek yükle
+          </button>
+          <input
+            ref={importRef}
+            className="hidden"
+            type="file"
+            accept=".json,.cinovid.json,application/json"
+            onChange={(event) => void restoreBackup(event.target.files?.[0])}
+          />
           {quota && (
             <span className="badge">
               {quota.usedMB} MB / {quota.quotaMB} MB cihaz deposu
@@ -88,6 +131,9 @@ export default function Projects() {
               <Link href={`/editor/${p.id}`} className="btn btn-sm btn-primary">
                 Aç
               </Link>
+              <button className="btn btn-sm" onClick={() => void downloadBackup(p)}>
+                Yedekle
+              </button>
               <button className="btn btn-sm btn-danger" onClick={() => remove(p)}>
                 Sil
               </button>
