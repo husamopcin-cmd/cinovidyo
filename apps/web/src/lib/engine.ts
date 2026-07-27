@@ -6,6 +6,7 @@
 // Kayıt gerçek zamanlıdır: 30 saniyelik video ~30 saniyede üretilir.
 
 import {
+  DEFAULT_AUDIO_MIX,
   FPS,
   PALETTES,
   VIDEO_HEIGHT,
@@ -495,18 +496,48 @@ export type RecordResult = { blob: Blob; ext: string; durationSec: number };
 export type RecordOptions = {
   project: Project;
   media: MediaMap;
+  /** arka plan müziği dosyası */
   audio?: Blob;
-  ttsEnabled?: boolean;
-  ttsVolume?: number;
+  /** sahne seslendirmeleri: Asset.id -> ses dosyası */
+  voices?: Map<string, Blob>;
   onProgress?: (ratio: number, elapsed: number) => void;
+  /** dışarıdan iptal için: { cancelled: true } yapılınca kayıt durur */
+  signal?: { cancelled: boolean };
 };
+
+/**
+ * Tek bir paylaşılan AudioContext.
+ * createMediaElementSource bir eleman için yalnızca BİR kez çağrılabilir; her
+ * kayıtta yeni context açmak ikinci render'da InvalidStateError verir.
+ */
+let sharedAudioCtx: AudioContext | null = null;
+const elementSources = new WeakMap<HTMLMediaElement, MediaElementAudioSourceNode>();
+
+function getAudioContext(): AudioContext {
+  if (!sharedAudioCtx) {
+    const AC: typeof AudioContext =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    sharedAudioCtx = new AC();
+  }
+  return sharedAudioCtx;
+}
+
+function sourceFor(ctx: AudioContext, el: HTMLMediaElement): MediaElementAudioSourceNode {
+  let node = elementSources.get(el);
+  if (!node) {
+    node = ctx.createMediaElementSource(el);
+    elementSources.set(el, node);
+  }
+  return node;
+}
 
 /**
  * Zaman çizelgesini gerçek zamanlı olarak kaydeder ve video Blob'u döner.
  * Hata durumunda reject eder; sessizce başarısız olmaz.
  */
 export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
-  const { project, media, audio, ttsEnabled, ttsVolume, onProgress } = opts;
+  const { project, media, audio, voices, onProgress, signal } = opts;
   const picked = pickMime();
   if (!picked) {
     throw new Error(
@@ -521,69 +552,92 @@ export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
   const canvas = document.createElement("canvas");
   canvas.width = VIDEO_WIDTH;
   canvas.height = VIDEO_HEIGHT;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas 2D bağlamı oluşturulamadı.");
+  const rawCtx = canvas.getContext("2d");
+  if (!rawCtx) throw new Error("Canvas 2D bağlamı oluşturulamadı.");
+  // açık tip: aşağıdaki fonksiyon bildirimleri içinde daraltma korunsun
+  const ctx: CanvasRenderingContext2D = rawCtx;
 
   const stream = canvas.captureStream(FPS);
 
-  // Arka plan müziği varsa ses kanalını ekle
+  /* ── Ses grafiği ──
+     Üç kaynak bağımsız gain düğümleriyle karıştırılıp MediaRecorder akışına eklenir:
+       1) sahne videolarının kendi sesi
+       2) sahne seslendirmeleri (voiceAssetId ses dosyaları)
+       3) arka plan müziği
+     Not: tarayıcının konuşma sentezi (SpeechSynthesis) çıktısı bir MediaStream'e
+     yönlendirilemez, bu yüzden export'a giremez. Seslendirme yalnızca gerçek bir
+     ses dosyası olarak gömülür. */
+  const mix = project.audioMix ?? DEFAULT_AUDIO_MIX;
+  const ownedAudioEls: HTMLAudioElement[] = [];
+  const objectUrls: string[] = [];
+  const gains: GainNode[] = [];
+  const voicePlayers = new Map<string, HTMLAudioElement>();
+  let musicEl: HTMLAudioElement | null = null;
   let audioCtx: AudioContext | null = null;
-  let audioEl: HTMLAudioElement | null = null;
-  let musicGain: GainNode | null = null;
-  
-  if (audio) {
+
+  const hasMusic = mix.musicEnabled && !!audio;
+  const hasVideoAudio =
+    mix.videoEnabled &&
+    project.scenes.some((s) => s.assetId && media.get(s.assetId) instanceof HTMLVideoElement);
+  const hasVoice =
+    mix.voiceEnabled && project.scenes.some((s) => s.voiceAssetId && voices?.get(s.voiceAssetId));
+
+  if (hasMusic || hasVideoAudio || hasVoice) {
     try {
-      const AC: typeof AudioContext =
-        window.AudioContext ??
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      audioCtx = new AC();
-      audioEl = document.createElement("audio");
-      audioEl.src = URL.createObjectURL(audio);
-      audioEl.loop = true;
-      audioEl.volume = 0.5;
-      audioEl.muted = false;
-      audioEl.crossOrigin = "anonymous";
-      await audioEl.play().catch(() => undefined);
-      const source = audioCtx.createMediaElementSource(audioEl);
-      musicGain = audioCtx.createGain();
-      musicGain.gain.value = 0.5;
+      audioCtx = getAudioContext();
+      await audioCtx.resume().catch(() => undefined);
       const dest = audioCtx.createMediaStreamDestination();
-      source.connect(musicGain);
-      musicGain.connect(dest);
-      musicGain.connect(audioCtx.destination);
+
+      const connect = (el: HTMLMediaElement, volume: number) => {
+        const node = sourceFor(audioCtx!, el);
+        const gain = audioCtx!.createGain();
+        gain.gain.value = volume;
+        node.connect(gain);
+        gain.connect(dest);
+        // kullanıcı kayıt sırasında da duysun
+        gain.connect(audioCtx!.destination);
+        gains.push(gain);
+      };
+
+      if (hasMusic && audio) {
+        const el = document.createElement("audio");
+        const url = URL.createObjectURL(audio);
+        objectUrls.push(url);
+        el.src = url;
+        el.loop = true;
+        ownedAudioEls.push(el);
+        connect(el, mix.musicVolume);
+        musicEl = el;
+      }
+
+      if (hasVideoAudio) {
+        media.forEach((el) => {
+          if (el instanceof HTMLVideoElement) {
+            el.muted = false;
+            connect(el, mix.videoVolume);
+          }
+        });
+      }
+
+      if (hasVoice && voices) {
+        for (const scene of project.scenes) {
+          const blob = scene.voiceAssetId ? voices.get(scene.voiceAssetId) : undefined;
+          if (!blob) continue;
+          const el = document.createElement("audio");
+          const url = URL.createObjectURL(blob);
+          objectUrls.push(url);
+          el.src = url;
+          ownedAudioEls.push(el);
+          connect(el, mix.voiceVolume);
+          voicePlayers.set(scene.id, el);
+        }
+      }
+
       dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
     } catch (err) {
-      console.error("Ses eklenemedi:", err);
+      // Ses kurulamazsa video sessiz üretilir; sessizce yutulmaz.
+      console.error("Ses grafiği kurulamadı:", err);
       audioCtx = null;
-    }
-  }
-
-  // TTS seslendirmesi
-  let ttsUtterance: SpeechSynthesisUtterance | null = null;
-  let ttsEnded = false;
-  
-  if (ttsEnabled && typeof window !== "undefined" && window.speechSynthesis) {
-    // İlk sahnenin seslendirme metnini al
-    const firstSceneWithVoice = project.scenes.find(s => s.voiceText && s.voiceText.trim());
-    if (firstSceneWithVoice) {
-      try {
-        const utterance = new SpeechSynthesisUtterance(firstSceneWithVoice.voiceText || firstSceneWithVoice.subtitle);
-        if (firstSceneWithVoice.voiceId) {
-          const voices = window.speechSynthesis.getVoices();
-          const voice = voices.find(v => v.name === firstSceneWithVoice.voiceId);
-          if (voice) utterance.voice = voice;
-        }
-        utterance.volume = ttsVolume ?? 0.8;
-        utterance.rate = 1.0;
-        utterance.pitch = 1.0;
-        
-        utterance.onend = () => { ttsEnded = true; };
-        utterance.onerror = () => { ttsEnded = true; };
-        
-        ttsUtterance = utterance;
-      } catch (err) {
-        console.error("TTS başlatılamadı:", err);
-      }
     }
   }
 
@@ -603,28 +657,35 @@ export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
 
   return new Promise<RecordResult>((resolve, reject) => {
     let finished = false;
-    const cancelled = { cancelled: false };
+    let cancelledByUser = false;
+
     const cleanup = () => {
+      document.removeEventListener("visibilitychange", onVisibility);
       videoEls.forEach((v) => v.pause());
+      ownedAudioEls.forEach((a) => a.pause());
       stream.getTracks().forEach((t) => t.stop());
-      if (audioEl) {
-        audioEl.pause();
-        URL.revokeObjectURL(audioEl.src);
-      }
-      audioCtx?.close().catch(() => undefined);
+      gains.forEach((g) => g.disconnect());
+      objectUrls.forEach((u) => URL.revokeObjectURL(u));
+      // paylaşılan AudioContext kapatılmaz: sonraki render'da tekrar kullanılır
     };
 
     recorder.onerror = (e) => {
       if (finished) return;
       finished = true;
       cleanup();
-      reject(new Error(`Kayıt hatası: ${(e as unknown as { error?: Error }).error?.message ?? "bilinmeyen"}`));
+      reject(
+        new Error(`Kayıt hatası: ${(e as unknown as { error?: Error }).error?.message ?? "bilinmeyen"}`)
+      );
     };
 
     recorder.onstop = () => {
       if (finished) return;
       finished = true;
       cleanup();
+      if (cancelledByUser) {
+        reject(new Error("Kayıt iptal edildi."));
+        return;
+      }
       const blob = new Blob(chunks, { type: picked.mime });
       if (blob.size === 0) {
         reject(new Error("Kayıt boş döndü — video üretilemedi."));
@@ -635,29 +696,79 @@ export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
 
     let activeIndex = -1;
     const startedAt = performance.now();
+    /** sekme arka plandayken geçen ve sayılmaması gereken süre */
+    let pausedTotal = 0;
+    let pausedAt: number | null = null;
 
-    const tick = () => {
+    const elapsed = () => ((pausedAt ?? performance.now()) - startedAt - pausedTotal) / 1000;
+
+    const stopRecorder = () => {
+      if (recorder.state !== "inactive") recorder.stop();
+    };
+
+    /**
+     * Sekme arka plana alındığında requestAnimationFrame tamamen durur; bu yüzden
+     * kaydı da duraklatırız. Aksi halde MediaRecorder gerçek zamanı kaydetmeye devam
+     * eder ve donmuş karelerden oluşan bozuk bir video üretilir.
+     */
+    function onVisibility() {
       if (finished) return;
-      if (cancelled.cancelled) {
-        recorder.stop();
+      if (document.hidden) {
+        if (pausedAt === null) {
+          pausedAt = performance.now();
+          if (recorder.state === "recording") recorder.pause();
+          videoEls.forEach((v) => v.pause());
+          ownedAudioEls.forEach((a) => a.pause());
+        }
+      } else if (pausedAt !== null) {
+        pausedTotal += performance.now() - pausedAt;
+        pausedAt = null;
+        if (recorder.state === "paused") recorder.resume();
+        activeIndex = -1; // sahne medyasını yeniden kur
+        schedule();
+      }
+    }
+
+    function schedule() {
+      if (finished) return;
+      if (signal?.cancelled) {
+        cancelledByUser = true;
+        stopRecorder();
         return;
       }
-      const time = (performance.now() - startedAt) / 1000;
+      if (document.hidden) {
+        // rAF arka planda çalışmaz; iptali yakalamak için düşük frekanslı nabız
+        window.setTimeout(schedule, 300);
+        return;
+      }
+      requestAnimationFrame(tick);
+    }
+
+    function tick() {
+      if (finished || pausedAt !== null) return;
+      if (signal?.cancelled) {
+        cancelledByUser = true;
+        stopRecorder();
+        return;
+      }
+
+      const time = elapsed();
       if (time >= total) {
         renderFrame(ctx, timeline, total - 0.001, media, project.subtitleStyle);
         onProgress?.(1, total);
-        // son kareyi yakalaması için küçük gecikme
-        setTimeout(() => recorder.state !== "inactive" && recorder.stop(), 120);
+        // son karenin akışa girmesi için küçük gecikme
+        window.setTimeout(stopRecorder, 150);
         return;
       }
 
       let index = timeline.findIndex((it) => time >= it.start && time < it.end);
       if (index === -1) index = 0;
+
       if (index !== activeIndex) {
         activeIndex = index;
-        const el = timeline[index].scene.assetId
-          ? media.get(timeline[index].scene.assetId!)
-          : undefined;
+        const scene = timeline[index].scene;
+        const el = scene.assetId ? media.get(scene.assetId) : undefined;
+
         if (el instanceof HTMLVideoElement) {
           videoEls.forEach((v) => v !== el && v.pause());
           try {
@@ -669,20 +780,42 @@ export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
         } else {
           videoEls.forEach((v) => v.pause());
         }
+
+        // sahnenin seslendirmesini baştan başlat
+        const voiceEl = voicePlayers.get(scene.id);
+        voicePlayers.forEach((a) => {
+          if (a !== voiceEl) a.pause();
+        });
+        if (voiceEl) {
+          try {
+            voiceEl.currentTime = 0;
+          } catch {
+            /* seek desteklenmiyorsa baştan çalamayız */
+          }
+          void voiceEl.play().catch(() => undefined);
+        }
       }
 
       renderFrame(ctx, timeline, time, media, project.subtitleStyle);
       onProgress?.(time / total, time);
-      requestAnimationFrame(tick);
-    };
+      schedule();
+    }
+
+    document.addEventListener("visibilitychange", onVisibility);
+
+    if (document.hidden) {
+      cleanup();
+      reject(
+        new Error(
+          "Kayıt başlatılamadı: sekme arka planda. CinoVid sekmesini görünür tut ve tekrar dene."
+        )
+      );
+      return;
+    }
 
     recorder.start(250);
-    
-    // TTS'i kayıt başladığında başlat
-    if (ttsUtterance && window.speechSynthesis) {
-      window.speechSynthesis.speak(ttsUtterance);
-    }
-    
-    requestAnimationFrame(tick);
+    // müzik baştan sona çalar; seslendirmeler sahne sırası geldiğinde başlar
+    if (musicEl) void musicEl.play().catch(() => undefined);
+    schedule();
   });
 }

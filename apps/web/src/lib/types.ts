@@ -36,10 +36,39 @@ export type Scene = {
   palette?: string;
   /** görselsiz sahnelerde kullanılan hareketli illüstrasyon */
   visual?: VisualStyle;
-  /** TTS için seslendirme metni */
+  /** seslendirme metni (önizleme okuması ve ses üretimi için) */
   voiceText?: string;
-  /** TTS ses ID (tarayıcı ses seçimi için) */
+  /** tarayıcı sesi adı — yalnızca önizlemede okuma için kullanılır */
   voiceId?: string;
+  /**
+   * Sahnenin seslendirme ses dosyası (Asset.id).
+   * Export'a SADECE bu dosya girer; tarayıcının konuşma sentezi (SpeechSynthesis)
+   * bir MediaStream'e yönlendirilemediği için videoya gömülemez.
+   */
+  voiceAssetId?: string;
+};
+
+/** Videodaki üç ses kaynağının bağımsız kontrolü. */
+export type AudioMix = {
+  /** sahne videolarının kendi sesi */
+  videoEnabled: boolean;
+  videoVolume: number;
+  /** sahne seslendirmeleri (voiceAssetId) */
+  voiceEnabled: boolean;
+  voiceVolume: number;
+  /** arka plan müziği (audioAssetId) */
+  musicEnabled: boolean;
+  musicVolume: number;
+};
+
+/** Üçü aynı anda açıkken clipping olmayacak güvenli başlangıç seviyeleri. */
+export const DEFAULT_AUDIO_MIX: AudioMix = {
+  videoEnabled: true,
+  videoVolume: 0.65,
+  voiceEnabled: true,
+  voiceVolume: 1,
+  musicEnabled: true,
+  musicVolume: 0.2,
 };
 
 export type Asset = {
@@ -76,6 +105,8 @@ export type Project = {
   subtitleStyle: SubtitleStyle;
   /** arka plan müziği için Asset.id */
   audioAssetId?: string;
+  /** ses karıştırma ayarları; eski projelerde tanımsız olabilir */
+  audioMix?: AudioMix;
   createdAt: string;
   updatedAt: string;
 };

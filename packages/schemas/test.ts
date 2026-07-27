@@ -1,4 +1,9 @@
+import { readFileSync, existsSync } from "node:fs";
+import path from "node:path";
 import { projectSchema, assetSchema } from "./index";
+
+/** packages/schemas -> depo kökü */
+const repoRoot = path.resolve(process.cwd(), "..", "..");
 
 function runTests() {
   let passed = 0;
@@ -37,6 +42,39 @@ function runTests() {
     mimeType: "application/x-msdownload"
   };
   assert(!assetSchema.safeParse(invalidAsset).success, "Desteklenmeyen dosya türü reddedilmeli");
+
+  // Test 4-6: Vercel dağıtım ön koşulları
+  // (bu üçü bozulduğunda deployment sessizce başarısız oluyordu)
+  const vercelPath = path.join(repoRoot, "vercel.json");
+  let vercelRaw = "";
+  let vercelOk = false;
+  try {
+    vercelRaw = readFileSync(vercelPath, "utf8");
+    JSON.parse(vercelRaw);
+    vercelOk = true;
+  } catch {
+    vercelOk = false;
+  }
+  assert(vercelOk, "vercel.json geçerli JSON olmalı");
+
+  const topLevelKeys = [...vercelRaw.matchAll(/^\s{2}"([^"]+)"\s*:/gm)].map((m) => m[1]);
+  assert(
+    new Set(topLevelKeys).size === topLevelKeys.length,
+    "vercel.json içinde tekrar eden anahtar olmamalı"
+  );
+
+  assert(
+    existsSync(path.join(repoRoot, "apps", "web", "pnpm-lock.yaml")),
+    "apps/web/pnpm-lock.yaml bulunmalı (Vercel Root Directory = apps/web)"
+  );
+
+  const rootPkg = JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8")) as {
+    packageManager?: string;
+  };
+  assert(
+    typeof rootPkg.packageManager === "string" && rootPkg.packageManager.startsWith("pnpm@"),
+    "package.json packageManager alanı pnpm sürümünü sabitlemeli"
+  );
 
   console.log(`\nTest Sonuçları: ${passed} Başarılı, ${failed} Başarısız`);
   if (failed > 0) throw new Error("Tests failed");

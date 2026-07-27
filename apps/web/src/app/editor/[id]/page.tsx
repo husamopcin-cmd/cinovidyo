@@ -15,6 +15,7 @@ import { analyze, applyCommand, planFromText } from "../../../lib/planner";
 import { extractPdfText } from "../../../lib/pdf";
 import { deleteAsset, getProject, listAssets, putAsset, saveProject } from "../../../lib/store";
 import {
+  DEFAULT_AUDIO_MIX,
   DEFAULT_SUBTITLE_STYLE,
   PALETTE_KEYS,
   VIDEO_HEIGHT,
@@ -22,6 +23,7 @@ import {
   newId,
   totalDuration,
   type Asset,
+  type AudioMix,
   type Motion,
   type Project,
   type Scene,
@@ -63,12 +65,14 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
   const [renderError, setRenderError] = useState("");
   const [notice, setNotice] = useState("");
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [ttsEnabled, setTtsEnabled] = useState(false);
-  const [ttsVolume, setTtsVolume] = useState(0.8);
+  const [voiceRecordingFor, setVoiceRecordingFor] = useState<string | null>(null);
+  const voiceRecorderRef = useRef<MediaRecorder | null>(null);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
   const startedRef = useRef({ wall: 0, at: 0 });
+  const cancelRef = useRef({ cancelled: false });
   const imageInput = useRef<HTMLInputElement>(null);
   const videoInput = useRef<HTMLInputElement>(null);
   const audioInput = useRef<HTMLInputElement>(null);
@@ -219,6 +223,105 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
     if (!project) return;
     const scenes = project.scenes.map((s, i) => (i === index ? { ...s, ...changes } : s));
     patch((p) => ({ ...p, scenes }));
+  }
+
+  /* ── Ses ── */
+
+  function setMix(changes: Partial<AudioMix>) {
+    patch((p) => ({ ...p, audioMix: { ...(p.audioMix ?? DEFAULT_AUDIO_MIX), ...changes } }));
+  }
+
+  /** Tarayıcının konuşma sentezi — yalnızca önizleme; videoya gömülemez. */
+  function speakPreview(scene: Scene) {
+    if (typeof window === "undefined" || !window.speechSynthesis) {
+      setNotice("Bu tarayıcı metin okumayı desteklemiyor.");
+      return;
+    }
+    const text = scene.voiceText?.trim();
+    if (!text) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    const voice = availableVoices.find((v) => v.name === scene.voiceId);
+    if (voice) utterance.voice = voice;
+    utterance.lang = voice?.lang ?? "tr-TR";
+    utterance.onerror = () => setNotice("Metin okunamadı.");
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function playVoice(assetId: string) {
+    const asset = assets.find((a) => a.id === assetId);
+    if (!asset) {
+      setNotice("Ses dosyası bulunamadı.");
+      return;
+    }
+    previewAudioRef.current?.pause();
+    const el = new Audio(URL.createObjectURL(asset.blob));
+    el.onended = () => URL.revokeObjectURL(el.src);
+    previewAudioRef.current = el;
+    void el.play().catch(() => setNotice("Ses çalınamadı."));
+  }
+
+  /** Mikrofondan sahne seslendirmesi kaydeder — export'a giren tek seslendirme yolu. */
+  async function toggleVoiceRecording(index: number) {
+    if (voiceRecorderRef.current) {
+      voiceRecorderRef.current.stop();
+      return;
+    }
+    const scene = project?.scenes[index];
+    if (!project || !scene) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setNotice("Bu tarayıcı mikrofon kaydını desteklemiyor.");
+      return;
+    }
+
+    try {
+      const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find(
+        (m) => MediaRecorder.isTypeSupported(m)
+      );
+      const rec = new MediaRecorder(micStream, mimeType ? { mimeType } : undefined);
+      const parts: BlobPart[] = [];
+      rec.ondataavailable = (e) => {
+        if (e.data.size > 0) parts.push(e.data);
+      };
+      rec.onstop = async () => {
+        micStream.getTracks().forEach((t) => t.stop());
+        voiceRecorderRef.current = null;
+        setVoiceRecordingFor(null);
+        const blob = new Blob(parts, { type: rec.mimeType || "audio/webm" });
+        if (blob.size === 0) {
+          setNotice("Ses kaydı boş döndü — kayıt eklenmedi.");
+          return;
+        }
+        try {
+          const asset: Asset = {
+            id: newId("ast"),
+            projectId: project.id,
+            name: `sahne-${index + 1}-seslendirme.${blob.type.includes("mp4") ? "m4a" : "webm"}`,
+            mime: blob.type,
+            kind: "audio",
+            blob,
+            createdAt: new Date().toISOString(),
+          };
+          await putAsset(asset);
+          setAssets((prev) => [...prev, asset]);
+          updateScene(index, { voiceAssetId: asset.id });
+          setNotice(
+            `Sahne ${index + 1} seslendirmesi kaydedildi (${Math.round(blob.size / 1024)} KB) ve videoya eklenecek.`
+          );
+        } catch (err) {
+          setNotice(`Ses kaydedilemedi: ${err instanceof Error ? err.message : "bilinmeyen hata"}`);
+        }
+      };
+      rec.start();
+      voiceRecorderRef.current = rec;
+      setVoiceRecordingFor(scene.id);
+      setNotice(`Kayıt başladı — metni oku, bitince “Kaydı bitir”e bas.`);
+    } catch (err) {
+      setNotice(
+        `Mikrofona erişilemedi: ${err instanceof Error ? err.message : "izin verilmedi"}. Tarayıcı izinlerini kontrol et.`
+      );
+    }
   }
 
   function moveScene(index: number, dir: -1 | 1) {
@@ -476,12 +579,19 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
 
     try {
       const audioAsset = project.audioAssetId ? assets.find((a) => a.id === project.audioAssetId) : undefined;
+      const voiceBlobs = new Map<string, Blob>();
+      for (const asset of assets) {
+        if (asset.kind === "audio" && asset.id !== project.audioAssetId) {
+          voiceBlobs.set(asset.id, asset.blob);
+        }
+      }
+      cancelRef.current = { cancelled: false };
       const result = await recordVideo({
         project,
         media,
         audio: audioAsset?.blob,
-        ttsEnabled,
-        ttsVolume,
+        voices: voiceBlobs,
+        signal: cancelRef.current,
         onProgress: (ratio) => setProgress(Math.min(1, ratio)),
       });
       setOutput({
@@ -536,6 +646,7 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
   }
 
   const current = project.scenes[selected];
+  const mix = project.audioMix ?? DEFAULT_AUDIO_MIX;
 
   return (
     <>
@@ -601,9 +712,17 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
                 <div style={{ width: `${progress * 100}%` }} />
               </div>
               <p className="tiny">
-                Kayıt gerçek zamanlı: yaklaşık {total.toFixed(0)} saniye sürecek. Bu sekmeyi açık
-                bırak.
+                Kayıt gerçek zamanlı: yaklaşık {total.toFixed(0)} saniye sürecek. Sekmeyi
+                değiştirirsen kayıt otomatik duraklar, geri döndüğünde kaldığı yerden devam eder.
               </p>
+              <button
+                className="btn btn-sm btn-danger"
+                onClick={() => {
+                  cancelRef.current.cancelled = true;
+                }}
+              >
+                İptal et
+              </button>
             </>
           )}
 
@@ -810,7 +929,7 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
 
               <div>
                 <label className="label" htmlFor="voiceText">
-                  Seslendirme metni (TTS)
+                  Seslendirme metni
                 </label>
                 <textarea
                   id="voiceText"
@@ -818,14 +937,14 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
                   style={{ minHeight: 60 }}
                   value={current.voiceText || ""}
                   onChange={(e) => updateScene(selected, { voiceText: e.target.value })}
-                  placeholder="Bu sahne için seslendirilecek metni yaz..."
+                  placeholder="Bu sahnede söylenecek metni yaz…"
                 />
               </div>
 
               {availableVoices.length > 0 && (
                 <div>
                   <label className="label" htmlFor="voiceSelect">
-                    Ses seçimi
+                    Okuma sesi (yalnızca önizleme)
                   </label>
                   <select
                     id="voiceSelect"
@@ -840,6 +959,49 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
                       </option>
                     ))}
                   </select>
+                </div>
+              )}
+
+              <div className="row" style={{ gap: 8 }}>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => speakPreview(current)}
+                  disabled={!current.voiceText?.trim()}
+                >
+                  🔊 Metni oku (önizleme)
+                </button>
+                <button
+                  className={`btn btn-sm ${voiceRecordingFor === current.id ? "btn-danger" : ""}`}
+                  onClick={() => void toggleVoiceRecording(selected)}
+                >
+                  {voiceRecordingFor === current.id ? "⏹ Kaydı bitir" : "🎙 Sesini kaydet"}
+                </button>
+                {current.voiceAssetId && (
+                  <>
+                    <button className="btn btn-sm" onClick={() => playVoice(current.voiceAssetId!)}>
+                      ▶ Dinle
+                    </button>
+                    <button
+                      className="btn btn-sm btn-danger"
+                      onClick={() => updateScene(selected, { voiceAssetId: undefined })}
+                    >
+                      Sesi kaldır
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {current.voiceAssetId ? (
+                <div className="notice notice-ok">
+                  Bu sahnenin seslendirmesi videoya gömülecek:{" "}
+                  {assets.find((a) => a.id === current.voiceAssetId)?.name ?? "ses dosyası"}
+                </div>
+              ) : (
+                <div className="notice">
+                  <strong>Önemli:</strong> “Metni oku” tarayıcının konuşma sentezini kullanır ve
+                  yalnızca hoparlöründen duyulur — teknik olarak videoya gömülemez. Sesin videoya
+                  girmesi için “Sesini kaydet” ile mikrofondan okuman (veya Medya sekmesinden bir ses
+                  dosyası yüklemen) gerekir.
                 </div>
               )}
 
@@ -1112,30 +1274,49 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
               )}
 
               <div className="label" style={{ marginTop: 12 }}>
-                Seslendirme (TTS)
+                Ses karıştırıcı
               </div>
-              <label className="row" style={{ gap: 8, cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={ttsEnabled}
-                  onChange={(e) => setTtsEnabled(e.target.checked)}
-                />
-                <span style={{ fontSize: 14 }}>Seslendirmeyi etkinleştir</span>
-              </label>
-              {ttsEnabled && (
-                <div>
-                  <label className="label">Ses seviyesi: {Math.round(ttsVolume * 100)}%</label>
-                  <input
-                    type="range"
-                    className="range"
-                    min={0}
-                    max={1}
-                    step={0.1}
-                    value={ttsVolume}
-                    onChange={(e) => setTtsVolume(Number(e.target.value))}
-                  />
-                </div>
-              )}
+              {(
+                [
+                  { key: "video", label: "Video sesi", hint: "Yüklediğin videoların kendi sesi" },
+                  { key: "voice", label: "Seslendirme", hint: "Sahnelere kaydettiğin ses" },
+                  { key: "music", label: "Arka plan müziği", hint: "Döngüyle çalar" },
+                ] as const
+              ).map(({ key, label, hint }) => {
+                const enabled = mix[`${key}Enabled` as const];
+                const volume = mix[`${key}Volume` as const];
+                return (
+                  <div key={key} className="stack" style={{ gap: 6 }}>
+                    <label className="row" style={{ gap: 8, cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={enabled}
+                        onChange={(e) => setMix({ [`${key}Enabled`]: e.target.checked })}
+                      />
+                      <span style={{ fontSize: 14, fontWeight: 700 }}>{label}</span>
+                      <span className="tiny">{Math.round(volume * 100)}%</span>
+                    </label>
+                    <input
+                      type="range"
+                      className="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={volume}
+                      disabled={!enabled}
+                      onChange={(e) => setMix({ [`${key}Volume`]: Number(e.target.value) })}
+                      aria-label={`${label} seviyesi`}
+                    />
+                    <p className="tiny">{hint}</p>
+                  </div>
+                );
+              })}
+              <button
+                className="btn btn-sm"
+                onClick={() => patch((p) => ({ ...p, audioMix: { ...DEFAULT_AUDIO_MIX } }))}
+              >
+                Ses seviyelerini sıfırla
+              </button>
 
               <div className="label" style={{ marginTop: 6 }}>
                 Yüklenen dosyalar ({assets.length})
