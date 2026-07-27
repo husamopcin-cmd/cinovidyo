@@ -62,6 +62,9 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
   const [output, setOutput] = useState<{ url: string; ext: string; sizeMB: number } | null>(null);
   const [renderError, setRenderError] = useState("");
   const [notice, setNotice] = useState("");
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [ttsEnabled, setTtsEnabled] = useState(false);
+  const [ttsVolume, setTtsVolume] = useState(0.8);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
@@ -101,6 +104,25 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
       alive = false;
     };
   }, [id]);
+
+  /* ── TTS seslerini yükle ── */
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      const turkishVoices = voices.filter(v => v.lang.startsWith('tr'));
+      setAvailableVoices(turkishVoices.length > 0 ? turkishVoices : voices);
+    };
+
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null;
+    };
+  }, []);
 
   /* ── Kalıcılaştırma ── */
 
@@ -458,6 +480,8 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
         project,
         media,
         audio: audioAsset?.blob,
+        ttsEnabled,
+        ttsVolume,
         onProgress: (ratio) => setProgress(Math.min(1, ratio)),
       });
       setOutput({
@@ -785,6 +809,41 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
               </div>
 
               <div>
+                <label className="label" htmlFor="voiceText">
+                  Seslendirme metni (TTS)
+                </label>
+                <textarea
+                  id="voiceText"
+                  className="textarea"
+                  style={{ minHeight: 60 }}
+                  value={current.voiceText || ""}
+                  onChange={(e) => updateScene(selected, { voiceText: e.target.value })}
+                  placeholder="Bu sahne için seslendirilecek metni yaz..."
+                />
+              </div>
+
+              {availableVoices.length > 0 && (
+                <div>
+                  <label className="label" htmlFor="voiceSelect">
+                    Ses seçimi
+                  </label>
+                  <select
+                    id="voiceSelect"
+                    className="select"
+                    value={current.voiceId || ""}
+                    onChange={(e) => updateScene(selected, { voiceId: e.target.value })}
+                  >
+                    <option value="">Varsayılan ses</option>
+                    {availableVoices.map((v) => (
+                      <option key={v.name} value={v.name}>
+                        {v.name} ({v.lang})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
                 <label className="label">Süre: {current.duration.toFixed(1)} saniye</label>
                 <input
                   type="range"
@@ -1048,9 +1107,34 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
                 </div>
               ) : (
                 <p className="tiny">
-                  Müzik eklersen kayda ses kanalı olarak eklenir. Seslendirme (TTS) henüz yok — bu
-                  sürümde ses yalnızca yüklediğin dosyadan gelir.
+                  Müzik eklersen kayda ses kanalı olarak eklenir.
                 </p>
+              )}
+
+              <div className="label" style={{ marginTop: 12 }}>
+                Seslendirme (TTS)
+              </div>
+              <label className="row" style={{ gap: 8, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={ttsEnabled}
+                  onChange={(e) => setTtsEnabled(e.target.checked)}
+                />
+                <span style={{ fontSize: 14 }}>Seslendirmeyi etkinleştir</span>
+              </label>
+              {ttsEnabled && (
+                <div>
+                  <label className="label">Ses seviyesi: {Math.round(ttsVolume * 100)}%</label>
+                  <input
+                    type="range"
+                    className="range"
+                    min={0}
+                    max={1}
+                    step={0.1}
+                    value={ttsVolume}
+                    onChange={(e) => setTtsVolume(Number(e.target.value))}
+                  />
+                </div>
               )}
 
               <div className="label" style={{ marginTop: 6 }}>

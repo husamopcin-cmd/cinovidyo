@@ -496,6 +496,8 @@ export type RecordOptions = {
   project: Project;
   media: MediaMap;
   audio?: Blob;
+  ttsEnabled?: boolean;
+  ttsVolume?: number;
   onProgress?: (ratio: number, elapsed: number) => void;
 };
 
@@ -504,7 +506,7 @@ export type RecordOptions = {
  * Hata durumunda reject eder; sessizce başarısız olmaz.
  */
 export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
-  const { project, media, audio, onProgress } = opts;
+  const { project, media, audio, ttsEnabled, ttsVolume, onProgress } = opts;
   const picked = pickMime();
   if (!picked) {
     throw new Error(
@@ -527,6 +529,8 @@ export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
   // Arka plan müziği varsa ses kanalını ekle
   let audioCtx: AudioContext | null = null;
   let audioEl: HTMLAudioElement | null = null;
+  let musicGain: GainNode | null = null;
+  
   if (audio) {
     try {
       const AC: typeof AudioContext =
@@ -541,13 +545,45 @@ export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
       audioEl.crossOrigin = "anonymous";
       await audioEl.play().catch(() => undefined);
       const source = audioCtx.createMediaElementSource(audioEl);
+      musicGain = audioCtx.createGain();
+      musicGain.gain.value = 0.5;
       const dest = audioCtx.createMediaStreamDestination();
-      source.connect(dest);
-      source.connect(audioCtx.destination);
+      source.connect(musicGain);
+      musicGain.connect(dest);
+      musicGain.connect(audioCtx.destination);
       dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
     } catch (err) {
       console.error("Ses eklenemedi:", err);
       audioCtx = null;
+    }
+  }
+
+  // TTS seslendirmesi
+  let ttsUtterance: SpeechSynthesisUtterance | null = null;
+  let ttsEnded = false;
+  
+  if (ttsEnabled && typeof window !== "undefined" && window.speechSynthesis) {
+    // İlk sahnenin seslendirme metnini al
+    const firstSceneWithVoice = project.scenes.find(s => s.voiceText && s.voiceText.trim());
+    if (firstSceneWithVoice) {
+      try {
+        const utterance = new SpeechSynthesisUtterance(firstSceneWithVoice.voiceText || firstSceneWithVoice.subtitle);
+        if (firstSceneWithVoice.voiceId) {
+          const voices = window.speechSynthesis.getVoices();
+          const voice = voices.find(v => v.name === firstSceneWithVoice.voiceId);
+          if (voice) utterance.voice = voice;
+        }
+        utterance.volume = ttsVolume ?? 0.8;
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        
+        utterance.onend = () => { ttsEnded = true; };
+        utterance.onerror = () => { ttsEnded = true; };
+        
+        ttsUtterance = utterance;
+      } catch (err) {
+        console.error("TTS başlatılamadı:", err);
+      }
     }
   }
 
@@ -641,6 +677,12 @@ export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
     };
 
     recorder.start(250);
+    
+    // TTS'i kayıt başladığında başlat
+    if (ttsUtterance && window.speechSynthesis) {
+      window.speechSynthesis.speak(ttsUtterance);
+    }
+    
     requestAnimationFrame(tick);
   });
 }

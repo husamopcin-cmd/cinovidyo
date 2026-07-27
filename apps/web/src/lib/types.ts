@@ -36,6 +36,10 @@ export type Scene = {
   palette?: string;
   /** görselsiz sahnelerde kullanılan hareketli illüstrasyon */
   visual?: VisualStyle;
+  /** TTS için seslendirme metni */
+  voiceText?: string;
+  /** TTS ses ID (tarayıcı ses seçimi için) */
+  voiceId?: string;
 };
 
 export type Asset = {
