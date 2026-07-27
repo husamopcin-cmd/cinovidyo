@@ -66,7 +66,6 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
   const startedRef = useRef({ wall: 0, at: 0 });
-  const cancelRef = useRef({ cancelled: false });
   const imageInput = useRef<HTMLInputElement>(null);
   const videoInput = useRef<HTMLInputElement>(null);
   const audioInput = useRef<HTMLInputElement>(null);
@@ -448,7 +447,6 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
       return;
     }
 
-    cancelRef.current = { cancelled: false };
     setRecording(true);
     setProgress(0);
     if (output) URL.revokeObjectURL(output.url);
@@ -460,7 +458,6 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
         project,
         media,
         audio: audioAsset?.blob,
-        signal: cancelRef.current,
         onProgress: (ratio) => setProgress(Math.min(1, ratio)),
       });
       setOutput({
@@ -583,14 +580,6 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
                 Kayıt gerçek zamanlı: yaklaşık {total.toFixed(0)} saniye sürecek. Bu sekmeyi açık
                 bırak.
               </p>
-              <button
-                className="btn btn-sm btn-danger"
-                onClick={() => {
-                  cancelRef.current.cancelled = true;
-                }}
-              >
-                İptal et
-              </button>
             </>
           )}
 

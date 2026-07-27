@@ -497,7 +497,6 @@ export type RecordOptions = {
   media: MediaMap;
   audio?: Blob;
   onProgress?: (ratio: number, elapsed: number) => void;
-  signal?: { cancelled: boolean };
 };
 
 /**
@@ -505,7 +504,7 @@ export type RecordOptions = {
  * Hata durumunda reject eder; sessizce başarısız olmaz.
  */
 export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
-  const { project, media, audio, onProgress, signal } = opts;
+  const { project, media, audio, onProgress } = opts;
   const picked = pickMime();
   if (!picked) {
     throw new Error(
@@ -537,13 +536,17 @@ export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
       audioEl = document.createElement("audio");
       audioEl.src = URL.createObjectURL(audio);
       audioEl.loop = true;
+      audioEl.volume = 0.5;
+      audioEl.muted = false;
+      audioEl.crossOrigin = "anonymous";
       await audioEl.play().catch(() => undefined);
       const source = audioCtx.createMediaElementSource(audioEl);
       const dest = audioCtx.createMediaStreamDestination();
       source.connect(dest);
+      source.connect(audioCtx.destination);
       dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
-    } catch {
-      // Ses eklenemezse video sessiz üretilir; kullanıcıya sonuçta bildirilir.
+    } catch (err) {
+      console.error("Ses eklenemedi:", err);
       audioCtx = null;
     }
   }
@@ -564,6 +567,7 @@ export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
 
   return new Promise<RecordResult>((resolve, reject) => {
     let finished = false;
+    const cancelled = { cancelled: false };
     const cleanup = () => {
       videoEls.forEach((v) => v.pause());
       stream.getTracks().forEach((t) => t.stop());
@@ -598,7 +602,7 @@ export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
 
     const tick = () => {
       if (finished) return;
-      if (signal?.cancelled) {
+      if (cancelled.cancelled) {
         recorder.stop();
         return;
       }
