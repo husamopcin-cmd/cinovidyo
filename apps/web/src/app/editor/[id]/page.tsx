@@ -1022,95 +1022,142 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
                 </button>
               </div>
 
-              <div>
-                <label className="label" htmlFor="sub">
-                  Altyazı / ekran metni
-                </label>
-                <textarea
-                  id="sub"
-                  className="textarea"
-                  style={{ minHeight: 80 }}
-                  value={current.subtitle}
-                  onChange={(e) => updateScene(selected, { subtitle: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <label className="label" htmlFor="voiceText">
-                  Seslendirme metni
-                </label>
-                <textarea
-                  id="voiceText"
-                  className="textarea"
-                  style={{ minHeight: 60 }}
-                  value={current.voiceText || ""}
-                  onChange={(e) => updateScene(selected, { voiceText: e.target.value })}
-                  placeholder="Bu sahnede söylenecek metni yaz…"
-                />
-              </div>
-
-              <div>
-                <label className="label" htmlFor="voiceMode">
-                  Seslendirme yöntemi
-                </label>
-                <select
-                  id="voiceMode"
-                  className="select"
-                  value={current.voiceMode ?? (current.voiceAssetId ? "mic" : "none")}
-                  onChange={(e) => setVoiceMode(selected, e.target.value as VoiceMode)}
-                >
-                  <option value="none">Seslendirme yok</option>
-                  <option value="tts">Yapay ses</option>
-                  <option value="mic">Kendi sesimi kaydet</option>
-                </select>
-              </div>
-
-              {current.voiceMode === "tts" && (
-                <div className="stack" style={{ gap: 10 }}>
+              <details className="accordion" open>
+                <summary className="section-title">İçerik</summary>
+                <div className="accordion-body">
                   <div>
-                    <label className="label" htmlFor="voiceId">
-                      Ses
+                    <label className="label" htmlFor="sub">
+                      Altyazı / ekran metni
+                    </label>
+                    <textarea
+                      id="sub"
+                      className="textarea"
+                      style={{ minHeight: 80 }}
+                      value={current.subtitle}
+                      onChange={(e) => updateScene(selected, { subtitle: e.target.value })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="label" htmlFor="voiceText">
+                      Seslendirme metni
+                    </label>
+                    <textarea
+                      id="voiceText"
+                      className="textarea"
+                      style={{ minHeight: 60 }}
+                      value={current.voiceText || ""}
+                      onChange={(e) => updateScene(selected, { voiceText: e.target.value })}
+                      placeholder="Bu sahnede söylenecek metni yaz…"
+                    />
+                  </div>
+                </div>
+              </details>
+
+              <details
+                className="accordion"
+                open={(current.voiceMode ?? (current.voiceAssetId ? "mic" : "none")) !== "none"}
+              >
+                <summary className="section-title">Seslendirme</summary>
+                <div className="accordion-body">
+                  <div>
+                    <label className="label" htmlFor="voiceMode">
+                      Seslendirme yöntemi
                     </label>
                     <select
-                      id="voiceId"
+                      id="voiceMode"
                       className="select"
-                      value={current.voiceId ?? "tr-female"}
-                      onChange={(e) => updateScene(selected, { voiceId: e.target.value as VoiceId })}
-                      disabled={!ttsInfo.configured}
+                      value={current.voiceMode ?? (current.voiceAssetId ? "mic" : "none")}
+                      onChange={(e) => setVoiceMode(selected, e.target.value as VoiceMode)}
                     >
-                      {(Object.keys(VOICE_LABELS) as VoiceId[]).map((v) => (
-                        <option key={v} value={v}>
-                          {VOICE_LABELS[v]}
-                        </option>
-                      ))}
+                      <option value="none">Seslendirme yok</option>
+                      <option value="tts">Yapay ses</option>
+                      <option value="mic">Kendi sesimi kaydet</option>
                     </select>
                   </div>
 
-                  {ttsInfo.configured ? (
+                  {current.voiceMode === "tts" && (
+                    <div className="stack" style={{ gap: 10 }}>
+                      <div>
+                        <label className="label" htmlFor="voiceId">
+                          Ses
+                        </label>
+                        <select
+                          id="voiceId"
+                          className="select"
+                          value={current.voiceId ?? "tr-female"}
+                          onChange={(e) => updateScene(selected, { voiceId: e.target.value as VoiceId })}
+                          disabled={!ttsInfo.configured}
+                        >
+                          {(Object.keys(VOICE_LABELS) as VoiceId[]).map((v) => (
+                            <option key={v} value={v}>
+                              {VOICE_LABELS[v]}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {ttsInfo.configured ? (
+                        <div className="row" style={{ gap: 8 }}>
+                          <button
+                            className="btn btn-sm btn-primary"
+                            onClick={() => void generateVoice(selected)}
+                            disabled={
+                              current.voiceStatus === "generating" || !current.voiceText?.trim()
+                            }
+                          >
+                            {current.voiceStatus === "generating" ? (
+                              <>
+                                <span className="spin" /> Üretiliyor…
+                              </>
+                            ) : current.voiceAssetId ? (
+                              "Yeniden oluştur"
+                            ) : (
+                              "Ses oluştur"
+                            )}
+                          </button>
+                          {current.voiceAssetId && (
+                            <>
+                              <button
+                                className="btn btn-sm"
+                                onClick={() => playVoice(current.voiceAssetId!)}
+                              >
+                                ▶ Önizle
+                              </button>
+                              <button
+                                className="btn btn-sm btn-danger"
+                                onClick={() => void removeVoice(selected)}
+                              >
+                                Sil
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="notice notice-error">
+                          Sentetik ses servisi yapılandırılmamış. Sunucuya <code>TTS_PROVIDER</code> ve{" "}
+                          <code>TTS_API_KEY</code> eklenmeli. Şimdilik “Kendi sesimi kaydet” seçeneğini
+                          kullanabilirsin.
+                        </div>
+                      )}
+
+                      {current.voiceStatus === "error" && current.voiceError && (
+                        <div className="notice notice-error">{current.voiceError}</div>
+                      )}
+                    </div>
+                  )}
+
+                  {current.voiceMode === "mic" && (
                     <div className="row" style={{ gap: 8 }}>
                       <button
-                        className="btn btn-sm btn-primary"
-                        onClick={() => void generateVoice(selected)}
-                        disabled={
-                          current.voiceStatus === "generating" || !current.voiceText?.trim()
-                        }
+                        className={`btn btn-sm ${voiceRecordingFor === current.id ? "btn-danger" : ""}`}
+                        onClick={() => void toggleVoiceRecording(selected)}
                       >
-                        {current.voiceStatus === "generating" ? (
-                          <>
-                            <span className="spin" /> Üretiliyor…
-                          </>
-                        ) : current.voiceAssetId ? (
-                          "Yeniden oluştur"
-                        ) : (
-                          "Ses oluştur"
-                        )}
+                        {voiceRecordingFor === current.id ? "⏹ Kaydı bitir" : "🎙 Kaydı başlat"}
                       </button>
                       {current.voiceAssetId && (
                         <>
-                          <button
-                            className="btn btn-sm"
-                            onClick={() => playVoice(current.voiceAssetId!)}
-                          >
+                          <button className="btn btn-sm" onClick={() => playVoice(current.voiceAssetId!)}>
                             ▶ Önizle
                           </button>
                           <button
@@ -1122,138 +1169,109 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
                         </>
                       )}
                     </div>
-                  ) : (
-                    <div className="notice notice-error">
-                      Sentetik ses servisi yapılandırılmamış. Sunucuya <code>TTS_PROVIDER</code> ve{" "}
-                      <code>TTS_API_KEY</code> eklenmeli. Şimdilik “Kendi sesimi kaydet” seçeneğini
-                      kullanabilirsin.
+                  )}
+
+                  {current.voiceMode !== "none" && (
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => speakPreview(current)}
+                      disabled={!current.voiceText?.trim()}
+                      title="Tarayıcı okuması — videoya eklenmez"
+                    >
+                      🔈 Tarayıcıda oku · yalnızca önizleme, videoya eklenmez
+                    </button>
+                  )}
+
+                  {current.voiceAssetId && (
+                    <div className="notice notice-ok">
+                      Videoya gömülecek ses hazır
+                      {current.voiceDuration ? ` · ${current.voiceDuration.toFixed(1)} sn` : ""}
+                      {current.voiceProvider ? ` · ${current.voiceProvider}` : ""}
+                      {current.voiceDuration && current.voiceDuration > current.duration + 0.3 ? (
+                        <>
+                          {" "}
+                          — <strong>ses sahneden uzun</strong>, sahne bitince kesilir. Sahne süresini{" "}
+                          {current.voiceDuration.toFixed(1)} sn yapmak istersen süre çubuğunu artır.
+                        </>
+                      ) : null}
                     </div>
                   )}
-
-                  {current.voiceStatus === "error" && current.voiceError && (
-                    <div className="notice notice-error">{current.voiceError}</div>
-                  )}
                 </div>
-              )}
+              </details>
 
-              {current.voiceMode === "mic" && (
-                <div className="row" style={{ gap: 8 }}>
-                  <button
-                    className={`btn btn-sm ${voiceRecordingFor === current.id ? "btn-danger" : ""}`}
-                    onClick={() => void toggleVoiceRecording(selected)}
-                  >
-                    {voiceRecordingFor === current.id ? "⏹ Kaydı bitir" : "🎙 Kaydı başlat"}
-                  </button>
-                  {current.voiceAssetId && (
-                    <>
-                      <button className="btn btn-sm" onClick={() => playVoice(current.voiceAssetId!)}>
-                        ▶ Önizle
-                      </button>
-                      <button
-                        className="btn btn-sm btn-danger"
-                        onClick={() => void removeVoice(selected)}
+              <details className="accordion">
+                <summary className="section-title">Görünüm &amp; zamanlama</summary>
+                <div className="accordion-body">
+                  <div>
+                    <label className="label">Süre: {current.duration.toFixed(1)} saniye</label>
+                    <input
+                      type="range"
+                      className="range"
+                      min={1}
+                      max={20}
+                      step={0.5}
+                      value={current.duration}
+                      onChange={(e) => updateScene(selected, { duration: Number(e.target.value) })}
+                    />
+                  </div>
+
+                  <div className="grid grid-3">
+                    <div>
+                      <label className="label" htmlFor="mot">
+                        Hareket
+                      </label>
+                      <select
+                        id="mot"
+                        className="select"
+                        value={current.motion}
+                        onChange={(e) => updateScene(selected, { motion: e.target.value as Motion })}
                       >
-                        Sil
-                      </button>
-                    </>
+                        {(Object.keys(MOTION_LABELS) as Motion[]).map((m) => (
+                          <option key={m} value={m}>
+                            {MOTION_LABELS[m]}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="label" htmlFor="tr">
+                        Geçiş
+                      </label>
+                      <select
+                        id="tr"
+                        className="select"
+                        value={current.transition}
+                        onChange={(e) => updateScene(selected, { transition: e.target.value as Transition })}
+                      >
+                        <option value="fade">Yumuşak (fade)</option>
+                        <option value="cut">Sert kesme</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="label" htmlFor="pal">
+                        Renk teması
+                      </label>
+                      <select
+                        id="pal"
+                        className="select"
+                        value={current.palette ?? "violet"}
+                        onChange={(e) => updateScene(selected, { palette: e.target.value })}
+                      >
+                        {PALETTE_KEYS.map((p) => (
+                          <option key={p} value={p}>
+                            {p}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  {current.assetId && (
+                    <p className="tiny">
+                      Renk teması yalnızca görselsiz (metin) sahnelerde görünür.
+                    </p>
                   )}
                 </div>
-              )}
-
-              {current.voiceMode !== "none" && (
-                <button
-                  className="btn btn-sm"
-                  onClick={() => speakPreview(current)}
-                  disabled={!current.voiceText?.trim()}
-                  title="Tarayıcı okuması — videoya eklenmez"
-                >
-                  🔈 Tarayıcıda oku · yalnızca önizleme, videoya eklenmez
-                </button>
-              )}
-
-              {current.voiceAssetId && (
-                <div className="notice notice-ok">
-                  Videoya gömülecek ses hazır
-                  {current.voiceDuration ? ` · ${current.voiceDuration.toFixed(1)} sn` : ""}
-                  {current.voiceProvider ? ` · ${current.voiceProvider}` : ""}
-                  {current.voiceDuration && current.voiceDuration > current.duration + 0.3 ? (
-                    <>
-                      {" "}
-                      — <strong>ses sahneden uzun</strong>, sahne bitince kesilir. Sahne süresini{" "}
-                      {current.voiceDuration.toFixed(1)} sn yapmak istersen süre çubuğunu artır.
-                    </>
-                  ) : null}
-                </div>
-              )}
-
-              <div>
-                <label className="label">Süre: {current.duration.toFixed(1)} saniye</label>
-                <input
-                  type="range"
-                  className="range"
-                  min={1}
-                  max={20}
-                  step={0.5}
-                  value={current.duration}
-                  onChange={(e) => updateScene(selected, { duration: Number(e.target.value) })}
-                />
-              </div>
-
-              <div className="grid grid-3">
-                <div>
-                  <label className="label" htmlFor="mot">
-                    Hareket
-                  </label>
-                  <select
-                    id="mot"
-                    className="select"
-                    value={current.motion}
-                    onChange={(e) => updateScene(selected, { motion: e.target.value as Motion })}
-                  >
-                    {(Object.keys(MOTION_LABELS) as Motion[]).map((m) => (
-                      <option key={m} value={m}>
-                        {MOTION_LABELS[m]}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="label" htmlFor="tr">
-                    Geçiş
-                  </label>
-                  <select
-                    id="tr"
-                    className="select"
-                    value={current.transition}
-                    onChange={(e) => updateScene(selected, { transition: e.target.value as Transition })}
-                  >
-                    <option value="fade">Yumuşak (fade)</option>
-                    <option value="cut">Sert kesme</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="label" htmlFor="pal">
-                    Renk teması
-                  </label>
-                  <select
-                    id="pal"
-                    className="select"
-                    value={current.palette ?? "violet"}
-                    onChange={(e) => updateScene(selected, { palette: e.target.value })}
-                  >
-                    {PALETTE_KEYS.map((p) => (
-                      <option key={p} value={p}>
-                        {p}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              {current.assetId && (
-                <p className="tiny">
-                  Renk teması yalnızca görselsiz (metin) sahnelerde görünür.
-                </p>
-              )}
+              </details>
             </div>
           )}
         </div>

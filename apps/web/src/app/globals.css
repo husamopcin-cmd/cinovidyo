@@ -4,8 +4,9 @@
   --bg: #070510;
   --bg-2: #0d0a1c;
   --fg: #f4f2fb;
-  --muted: #9a93b8;
+  --muted: #aca6cc;
   --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.14);
   --glass: rgba(255, 255, 255, 0.035);
   --violet: #8b5cf6;
   --indigo: #6366f1;
@@ -13,6 +14,7 @@
   --danger: #f87171;
   --ok: #34d399;
   --radius: 16px;
+  --radius-sm: 10px;
   --shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
 }
 
@@ -102,7 +104,7 @@ textarea {
   display: grid;
   place-items: center;
   font-size: 15px;
-  box-shadow: 0 0 20px rgba(139, 92, 246, 0.55);
+  box-shadow: 0 0 16px rgba(139, 92, 246, 0.4);
 }
 
 .spacer {
@@ -120,6 +122,10 @@ textarea {
 .nav-link:hover {
   color: var(--fg);
   background: var(--glass);
+}
+.nav-link.active {
+  color: var(--fg);
+  background: rgba(139, 92, 246, 0.14);
 }
 
 /* ── Tipografi ── */
@@ -251,10 +257,10 @@ textarea {
 .btn-primary {
   background: linear-gradient(135deg, var(--indigo), var(--violet));
   border-color: rgba(255, 255, 255, 0.18);
-  box-shadow: 0 0 26px rgba(139, 92, 246, 0.4);
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.32);
 }
 .btn-primary:hover:not(:disabled) {
-  box-shadow: 0 0 38px rgba(139, 92, 246, 0.65);
+  box-shadow: 0 0 28px rgba(139, 92, 246, 0.5);
   transform: translateY(-1px);
 }
 
@@ -431,19 +437,61 @@ textarea {
   box-shadow: inset 3px 0 0 var(--violet);
 }
 
-.quality-details summary {
+.quality-details summary,
+.accordion summary {
   cursor: pointer;
   font-size: 13px;
   font-weight: 750;
   color: var(--muted);
   list-style: none;
 }
-.quality-details summary::-webkit-details-marker {
+.quality-details summary::-webkit-details-marker,
+.accordion summary::-webkit-details-marker {
   display: none;
 }
-.quality-details[open] summary {
+.quality-details[open] summary,
+.accordion[open] summary {
   margin-bottom: 14px;
   color: var(--fg);
+}
+
+/* Katlanır sahne bölümleri — ayrı bir React state gerekmeden native <details> */
+.accordion {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.accordion + .accordion {
+  margin-top: 10px;
+}
+.accordion summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.accordion summary::before {
+  content: "▸";
+  font-size: 11px;
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+.accordion[open] summary::before {
+  transform: rotate(90deg);
+}
+.accordion-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 2px;
+}
+
+.section-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
 }
 
 .editor-tools .card {

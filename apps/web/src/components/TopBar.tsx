@@ -1,16 +1,26 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 export default function TopBar() {
+  const pathname = usePathname();
+  const onProjects = pathname === "/projects";
+
   return (
     <header className="topbar">
-      <Link href="/" className="brand">
+      <Link href="/" className="brand" aria-current={pathname === "/" ? "page" : undefined}>
         <span className="brand-dot">◈</span>
         <span>
           CinoVid <span className="grad">AI Studio</span>
         </span>
       </Link>
       <div className="spacer" />
-      <Link href="/projects" className="nav-link">
+      <Link
+        href="/projects"
+        className={`nav-link ${onProjects ? "active" : ""}`}
+        aria-current={onProjects ? "page" : undefined}
+      >
         Projelerim
       </Link>
       <Link href="/new" className="btn btn-primary btn-sm">
