@@ -14,12 +14,14 @@ import {
 import { analyze, applyCommand, planFromText } from "../../../lib/planner";
 import { extractPdfText } from "../../../lib/pdf";
 import { deleteAsset, getProject, listAssets, putAsset, saveProject } from "../../../lib/store";
+import { TtsNotConfiguredError, audioDuration, checkTts, synthesize, type TtsAvailability } from "../../../lib/tts";
 import {
   DEFAULT_AUDIO_MIX,
   DEFAULT_SUBTITLE_STYLE,
   PALETTE_KEYS,
   VIDEO_HEIGHT,
   VIDEO_WIDTH,
+  VOICE_LABELS,
   newId,
   totalDuration,
   type Asset,
@@ -28,6 +30,8 @@ import {
   type Project,
   type Scene,
   type Transition,
+  type VoiceId,
+  type VoiceMode,
 } from "../../../lib/types";
 
 const MOTION_LABELS: Record<Motion, string> = {
@@ -66,6 +70,11 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
   const [notice, setNotice] = useState("");
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [voiceRecordingFor, setVoiceRecordingFor] = useState<string | null>(null);
+  const [ttsInfo, setTtsInfo] = useState<TtsAvailability>({
+    configured: false,
+    provider: null,
+    voices: [],
+  });
   const voiceRecorderRef = useRef<MediaRecorder | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -109,7 +118,19 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
     };
   }, [id]);
 
-  /* ── TTS seslerini yükle ── */
+  /* ── Sentetik ses servisi açık mı? ── */
+
+  useEffect(() => {
+    let alive = true;
+    void checkTts().then((info) => {
+      if (alive) setTtsInfo(info);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  /* ── Tarayıcı okuma seslerini yükle (yalnızca önizleme) ── */
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
@@ -231,6 +252,86 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
     patch((p) => ({ ...p, audioMix: { ...(p.audioMix ?? DEFAULT_AUDIO_MIX), ...changes } }));
   }
 
+  /** Sahnenin seslendirme yöntemini değiştirir; yöntemler birbirini dışlar. */
+  function setVoiceMode(index: number, mode: VoiceMode) {
+    const scene = project?.scenes[index];
+    if (!scene) return;
+    // Yöntem değişince eski ses geçersiz olur; sessizce yanlış sesi taşımayalım.
+    if (scene.voiceAssetId) {
+      void deleteAsset(scene.voiceAssetId).catch(() => undefined);
+      setAssets((prev) => prev.filter((a) => a.id !== scene.voiceAssetId));
+    }
+    updateScene(index, {
+      voiceMode: mode,
+      voiceAssetId: undefined,
+      voiceProvider: undefined,
+      voiceDuration: undefined,
+      voiceError: undefined,
+      voiceStatus: "idle",
+      voiceId: mode === "tts" ? (scene.voiceId ?? "tr-female") : undefined,
+    });
+  }
+
+  /** Sentetik ses üretir ve proje asset'i olarak kaydeder. */
+  async function generateVoice(index: number) {
+    const scene = project?.scenes[index];
+    if (!project || !scene) return;
+    const text = scene.voiceText?.trim();
+    if (!text) {
+      setNotice("Önce seslendirme metnini yaz.");
+      return;
+    }
+
+    updateScene(index, { voiceStatus: "generating", voiceError: undefined });
+    try {
+      const voice = scene.voiceId ?? "tr-female";
+      const { blob, durationSec } = await synthesize(text, voice);
+
+      if (scene.voiceAssetId) {
+        await deleteAsset(scene.voiceAssetId).catch(() => undefined);
+      }
+      const asset: Asset = {
+        id: newId("ast"),
+        projectId: project.id,
+        name: `sahne-${index + 1}-${voice}.mp3`,
+        mime: blob.type || "audio/mpeg",
+        kind: "audio",
+        blob,
+        createdAt: new Date().toISOString(),
+      };
+      await putAsset(asset);
+      setAssets((prev) => [...prev.filter((a) => a.id !== scene.voiceAssetId), asset]);
+      updateScene(index, {
+        voiceAssetId: asset.id,
+        voiceProvider: ttsInfo.provider ?? "tts",
+        voiceStatus: "ready",
+        voiceDuration: durationSec,
+        voiceError: undefined,
+      });
+      setNotice(`Sahne ${index + 1} sesi üretildi (${durationSec.toFixed(1)} sn).`);
+    } catch (err) {
+      const message =
+        err instanceof TtsNotConfiguredError
+          ? err.message
+          : `Ses üretilemedi: ${err instanceof Error ? err.message : "bilinmeyen hata"}`;
+      updateScene(index, { voiceStatus: "error", voiceError: message });
+    }
+  }
+
+  async function removeVoice(index: number) {
+    const scene = project?.scenes[index];
+    if (!scene?.voiceAssetId) return;
+    await deleteAsset(scene.voiceAssetId).catch(() => undefined);
+    setAssets((prev) => prev.filter((a) => a.id !== scene.voiceAssetId));
+    updateScene(index, {
+      voiceAssetId: undefined,
+      voiceProvider: undefined,
+      voiceDuration: undefined,
+      voiceStatus: "idle",
+      voiceError: undefined,
+    });
+  }
+
   /** Tarayıcının konuşma sentezi — yalnızca önizleme; videoya gömülemez. */
   function speakPreview(scene: Scene) {
     if (typeof window === "undefined" || !window.speechSynthesis) {
@@ -241,7 +342,7 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
     if (!text) return;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    const voice = availableVoices.find((v) => v.name === scene.voiceId);
+    const voice = availableVoices.find((v) => v.lang.startsWith("tr")) ?? availableVoices[0];
     if (voice) utterance.voice = voice;
     utterance.lang = voice?.lang ?? "tr-TR";
     utterance.onerror = () => setNotice("Metin okunamadı.");
@@ -305,7 +406,14 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
           };
           await putAsset(asset);
           setAssets((prev) => [...prev, asset]);
-          updateScene(index, { voiceAssetId: asset.id });
+          updateScene(index, {
+            voiceAssetId: asset.id,
+            voiceMode: "mic",
+            voiceProvider: "mic",
+            voiceStatus: "ready",
+            voiceDuration: await audioDuration(blob),
+            voiceError: undefined,
+          });
           setNotice(
             `Sahne ${index + 1} seslendirmesi kaydedildi (${Math.round(blob.size / 1024)} KB) ve videoya eklenecek.`
           );
@@ -941,67 +1049,140 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
                 />
               </div>
 
-              {availableVoices.length > 0 && (
-                <div>
-                  <label className="label" htmlFor="voiceSelect">
-                    Okuma sesi (yalnızca önizleme)
-                  </label>
-                  <select
-                    id="voiceSelect"
-                    className="select"
-                    value={current.voiceId || ""}
-                    onChange={(e) => updateScene(selected, { voiceId: e.target.value })}
-                  >
-                    <option value="">Varsayılan ses</option>
-                    {availableVoices.map((v) => (
-                      <option key={v.name} value={v.name}>
-                        {v.name} ({v.lang})
-                      </option>
-                    ))}
-                  </select>
+              <div>
+                <label className="label" htmlFor="voiceMode">
+                  Seslendirme yöntemi
+                </label>
+                <select
+                  id="voiceMode"
+                  className="select"
+                  value={current.voiceMode ?? (current.voiceAssetId ? "mic" : "none")}
+                  onChange={(e) => setVoiceMode(selected, e.target.value as VoiceMode)}
+                >
+                  <option value="none">Seslendirme yok</option>
+                  <option value="tts">Yapay ses</option>
+                  <option value="mic">Kendi sesimi kaydet</option>
+                </select>
+              </div>
+
+              {current.voiceMode === "tts" && (
+                <div className="stack" style={{ gap: 10 }}>
+                  <div>
+                    <label className="label" htmlFor="voiceId">
+                      Ses
+                    </label>
+                    <select
+                      id="voiceId"
+                      className="select"
+                      value={current.voiceId ?? "tr-female"}
+                      onChange={(e) => updateScene(selected, { voiceId: e.target.value as VoiceId })}
+                      disabled={!ttsInfo.configured}
+                    >
+                      {(Object.keys(VOICE_LABELS) as VoiceId[]).map((v) => (
+                        <option key={v} value={v}>
+                          {VOICE_LABELS[v]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {ttsInfo.configured ? (
+                    <div className="row" style={{ gap: 8 }}>
+                      <button
+                        className="btn btn-sm btn-primary"
+                        onClick={() => void generateVoice(selected)}
+                        disabled={
+                          current.voiceStatus === "generating" || !current.voiceText?.trim()
+                        }
+                      >
+                        {current.voiceStatus === "generating" ? (
+                          <>
+                            <span className="spin" /> Üretiliyor…
+                          </>
+                        ) : current.voiceAssetId ? (
+                          "Yeniden oluştur"
+                        ) : (
+                          "Ses oluştur"
+                        )}
+                      </button>
+                      {current.voiceAssetId && (
+                        <>
+                          <button
+                            className="btn btn-sm"
+                            onClick={() => playVoice(current.voiceAssetId!)}
+                          >
+                            ▶ Önizle
+                          </button>
+                          <button
+                            className="btn btn-sm btn-danger"
+                            onClick={() => void removeVoice(selected)}
+                          >
+                            Sil
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="notice notice-error">
+                      Sentetik ses servisi yapılandırılmamış. Sunucuya <code>TTS_PROVIDER</code> ve{" "}
+                      <code>TTS_API_KEY</code> eklenmeli. Şimdilik “Kendi sesimi kaydet” seçeneğini
+                      kullanabilirsin.
+                    </div>
+                  )}
+
+                  {current.voiceStatus === "error" && current.voiceError && (
+                    <div className="notice notice-error">{current.voiceError}</div>
+                  )}
                 </div>
               )}
 
-              <div className="row" style={{ gap: 8 }}>
+              {current.voiceMode === "mic" && (
+                <div className="row" style={{ gap: 8 }}>
+                  <button
+                    className={`btn btn-sm ${voiceRecordingFor === current.id ? "btn-danger" : ""}`}
+                    onClick={() => void toggleVoiceRecording(selected)}
+                  >
+                    {voiceRecordingFor === current.id ? "⏹ Kaydı bitir" : "🎙 Kaydı başlat"}
+                  </button>
+                  {current.voiceAssetId && (
+                    <>
+                      <button className="btn btn-sm" onClick={() => playVoice(current.voiceAssetId!)}>
+                        ▶ Önizle
+                      </button>
+                      <button
+                        className="btn btn-sm btn-danger"
+                        onClick={() => void removeVoice(selected)}
+                      >
+                        Sil
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {current.voiceMode !== "none" && (
                 <button
                   className="btn btn-sm"
                   onClick={() => speakPreview(current)}
                   disabled={!current.voiceText?.trim()}
+                  title="Tarayıcı okuması — videoya eklenmez"
                 >
-                  🔊 Metni oku (önizleme)
+                  🔈 Tarayıcıda oku · yalnızca önizleme, videoya eklenmez
                 </button>
-                <button
-                  className={`btn btn-sm ${voiceRecordingFor === current.id ? "btn-danger" : ""}`}
-                  onClick={() => void toggleVoiceRecording(selected)}
-                >
-                  {voiceRecordingFor === current.id ? "⏹ Kaydı bitir" : "🎙 Sesini kaydet"}
-                </button>
-                {current.voiceAssetId && (
-                  <>
-                    <button className="btn btn-sm" onClick={() => playVoice(current.voiceAssetId!)}>
-                      ▶ Dinle
-                    </button>
-                    <button
-                      className="btn btn-sm btn-danger"
-                      onClick={() => updateScene(selected, { voiceAssetId: undefined })}
-                    >
-                      Sesi kaldır
-                    </button>
-                  </>
-                )}
-              </div>
+              )}
 
-              {current.voiceAssetId ? (
+              {current.voiceAssetId && (
                 <div className="notice notice-ok">
-                  Bu sahnenin seslendirmesi videoya gömülecek:{" "}
-                  {assets.find((a) => a.id === current.voiceAssetId)?.name ?? "ses dosyası"}
-                </div>
-              ) : (
-                <div className="notice">
-                  <strong>Önemli:</strong> “Metni oku” tarayıcının konuşma sentezini kullanır ve
-                  yalnızca hoparlöründen duyulur — teknik olarak videoya gömülemez. Sesin videoya
-                  girmesi için “Sesini kaydet” ile mikrofondan okuman (veya Medya sekmesinden bir ses
-                  dosyası yüklemen) gerekir.
+                  Videoya gömülecek ses hazır
+                  {current.voiceDuration ? ` · ${current.voiceDuration.toFixed(1)} sn` : ""}
+                  {current.voiceProvider ? ` · ${current.voiceProvider}` : ""}
+                  {current.voiceDuration && current.voiceDuration > current.duration + 0.3 ? (
+                    <>
+                      {" "}
+                      — <strong>ses sahneden uzun</strong>, sahne bitince kesilir. Sahne süresini{" "}
+                      {current.voiceDuration.toFixed(1)} sn yapmak istersen süre çubuğunu artır.
+                    </>
+                  ) : null}
                 </div>
               )}
 

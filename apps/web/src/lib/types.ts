@@ -20,6 +20,19 @@ export const DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
   background: true,
 };
 
+/** Sahnenin seslendirme yöntemi — biri seçilir, ikisi aynı anda çalışmaz. */
+export type VoiceMode = "none" | "tts" | "mic";
+
+/** Sentetik ses kimlikleri. */
+export type VoiceId = "tr-female" | "tr-male";
+
+export const VOICE_LABELS: Record<VoiceId, string> = {
+  "tr-female": "Kadın sesi",
+  "tr-male": "Erkek sesi",
+};
+
+export type VoiceStatus = "idle" | "generating" | "ready" | "error";
+
 export type Scene = {
   id: string;
   kind: SceneKind;
@@ -36,10 +49,20 @@ export type Scene = {
   palette?: string;
   /** görselsiz sahnelerde kullanılan hareketli illüstrasyon */
   visual?: VisualStyle;
-  /** seslendirme metni (önizleme okuması ve ses üretimi için) */
+  /** seslendirme metni (narrationText) */
   voiceText?: string;
-  /** tarayıcı sesi adı — yalnızca önizlemede okuma için kullanılır */
-  voiceId?: string;
+  /** sahnenin seslendirme yöntemi */
+  voiceMode?: VoiceMode;
+  /** sentetik ses kimliği: "tr-female" | "tr-male" */
+  voiceId?: VoiceId;
+  /** sesi üreten sağlayıcı ("google", "custom", "mic") */
+  voiceProvider?: string;
+  /** ses üretim durumu */
+  voiceStatus?: VoiceStatus;
+  /** son hata mesajı (voiceStatus === "error" iken) */
+  voiceError?: string;
+  /** üretilen sesin süresi (saniye) */
+  voiceDuration?: number;
   /**
    * Sahnenin seslendirme ses dosyası (Asset.id).
    * Export'a SADECE bu dosya girer; tarayıcının konuşma sentezi (SpeechSynthesis)
