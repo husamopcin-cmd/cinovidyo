@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import ThemeToggle from "./ThemeToggle";
 
 export default function TopBar() {
   const pathname = usePathname();
@@ -23,6 +24,7 @@ export default function TopBar() {
       >
         Projelerim
       </Link>
+      <ThemeToggle />
       <Link href="/new" className="btn btn-primary btn-sm">
         Yeni video
       </Link>

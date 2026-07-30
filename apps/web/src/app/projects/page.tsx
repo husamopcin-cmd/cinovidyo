@@ -143,7 +143,7 @@ export default function Projects() {
 
         <p className="tiny" style={{ marginTop: 24 }}>
           Projeler bu tarayıcının yerel deposunda (IndexedDB) tutulur. Başka cihazda görünmez;
-          tarayıcı verilerini temizlersen silinir.
+          tarayıcı verilerini temizlemeden veya cihaz değiştirmeden önce yedek alman önerilir.
         </p>
       </main>
     </>

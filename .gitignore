@@ -8,3 +8,6 @@ apps/web/public/pdf.worker.min.mjs
 .DS_Store
 data/
 apps/web/public/output.mp4
+
+.vercel
+.env*

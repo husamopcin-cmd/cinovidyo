@@ -10,12 +10,20 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#070510",
+  themeColor: "#f7f7fb",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="tr">
+    <html lang="tr" data-theme="light" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{document.documentElement.dataset.theme=localStorage.getItem('cinovid-theme')==='dark'?'dark':'light'}catch(e){}",
+          }}
+        />
+      </head>
       <body>{children}</body>
     </html>
   );

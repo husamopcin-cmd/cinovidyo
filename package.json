@@ -8,7 +8,8 @@
     "build": "pnpm -r run build",
     "lint": "pnpm -r run lint",
     "typecheck": "pnpm -r run typecheck",
-    "test": "pnpm -r run test"
+    "test": "pnpm -r run test",
+    "quality": "pnpm test && pnpm typecheck && pnpm lint && pnpm build"
   },
   "devDependencies": {
     "typescript": "^5.0.0"
