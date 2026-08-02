@@ -5,10 +5,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, use } from "react";
 import TopBar from "../../../components/TopBar";
 import {
   buildTimeline,
+  encodeVideoFast,
   isSupported,
   loadMedia,
   recordVideo,
   renderFrame,
+  supportsFastExport,
   type MediaMap,
 } from "../../../lib/engine";
 import { analyze, applyCommand, planFromText } from "../../../lib/planner";
@@ -694,14 +696,31 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
         }
       }
       cancelRef.current = { cancelled: false };
-      const result = await recordVideo({
+      const args = {
         project,
         media,
         audio: audioAsset?.blob,
         voices: voiceBlobs,
         signal: cancelRef.current,
-        onProgress: (ratio) => setProgress(Math.min(1, ratio)),
-      });
+        onProgress: (ratio: number) => setProgress(Math.min(1, ratio)),
+      };
+
+      // Hızlı yol: kareler tek tek kodlanır — gerçek zamandan hızlıdır ve
+      // sekmenin görünür kalmasını gerektirmez. Desteklenmiyorsa veya
+      // beklenmedik bir hata verirse gerçek zamanlı kayda düşülür.
+      let result;
+      if (await supportsFastExport()) {
+        try {
+          result = await encodeVideoFast(args);
+        } catch (fastErr) {
+          if (cancelRef.current.cancelled) throw fastErr;
+          console.error("Hızlı export başarısız, gerçek zamanlı kayda dönülüyor:", fastErr);
+          setNotice("Hızlı üretim bu videoda çalışmadı, normal kayda geçildi.");
+          result = await recordVideo(args);
+        }
+      } else {
+        result = await recordVideo(args);
+      }
       setOutput({
         url: URL.createObjectURL(result.blob),
         ext: result.ext,

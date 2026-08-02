@@ -22,7 +22,10 @@ import {
   Mp4OutputFormat,
   WebMOutputFormat,
   MediaStreamVideoTrackSource,
-  MediaStreamAudioTrackSource
+  MediaStreamAudioTrackSource,
+  CanvasSource,
+  AudioBufferSource,
+  canEncodeVideo,
 } from "mediabunny";
 
 const FADE_SEC = 0.5;
@@ -653,26 +656,25 @@ export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
   const format = picked.ext === "webm" ? new WebMOutputFormat() : new Mp4OutputFormat();
   const output = new Output({ format, target });
 
+  // Not: mediabunny API'si addVideoTrack/addAudioTrack'tir. Daha önce burada
+  // `(output as any).addTrack(...)` kullanılıyordu; `as any` cast'i TypeScript'i
+  // devre dışı bıraktığı için hata derlemede değil, ancak çalışma anında
+  // ("output.addTrack is not a function") ortaya çıkıyordu. Cast kaldırıldı ki
+  // API yanlış kullanılırsa derleme aşamasında yakalansın.
   const videoTrack = stream.getVideoTracks()[0];
   const videoSource = new MediaStreamVideoTrackSource(videoTrack, {
     codec: picked.ext === "webm" ? "vp8" : "avc",
-    width: VIDEO_WIDTH,
-    height: VIDEO_HEIGHT,
     bitrate: 6_000_000,
-    frameRate: FPS,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any, { timestampBase: "zero" });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (output as any).addTrack(videoSource);
+  });
+  output.addVideoTrack(videoSource);
 
   const audioTrack = stream.getAudioTracks()[0];
   if (audioTrack) {
     const audioSource = new MediaStreamAudioTrackSource(audioTrack, {
       codec: picked.ext === "webm" ? "opus" : "aac",
       bitrate: 128_000,
-    }, { timestampBase: "zero" });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (output as any).addTrack(audioSource);
+    });
+    output.addAudioTrack(audioSource);
   }
 
   await output.start();
@@ -850,4 +852,183 @@ export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
     if (musicEl) void musicEl.play().catch(() => undefined);
     schedule();
   });
+}
+
+/* ── Hızlı (deterministik) export ──
+   MediaRecorder / MediaStream yolu gerçek zamanlıdır: 30 sn'lik video 30 sn
+   sürer, requestAnimationFrame'e bağlıdır ve sekme arka plana alınınca durur.
+
+   Aşağıdaki yol bunun yerine kareleri tek tek çizip doğrudan kodlayıcıya verir:
+     • gerçek zamandan hızlıdır (donanım hızlandırmalı encode)
+     • rAF kullanmaz, bu yüzden sekme görünür olmak zorunda değildir
+     • kare zamanlamaları saat yerine sayaçla belirlendiği için tekrarlanabilir
+
+   Ses, canlı çalma yerine OfflineAudioContext ile kurgu-dışı (offline) miksajlanır. */
+
+/** Tarayıcı hızlı yolu destekliyor mu? */
+export async function supportsFastExport(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  if (typeof VideoEncoder === "undefined" || typeof OfflineAudioContext === "undefined") return false;
+  try {
+    return await canEncodeVideo("avc", { width: VIDEO_WIDTH, height: VIDEO_HEIGHT });
+  } catch {
+    return false;
+  }
+}
+
+/** Bir video elemanını istenen saniyeye konumlandırır ve karenin hazır olmasını bekler. */
+function seekTo(el: HTMLVideoElement, time: number): Promise<void> {
+  return new Promise((resolve) => {
+    const target = Math.max(0, Math.min(time, Number.isFinite(el.duration) ? el.duration - 0.05 : time));
+    if (Math.abs(el.currentTime - target) < 0.01) {
+      resolve();
+      return;
+    }
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      el.removeEventListener("seeked", finish);
+      resolve();
+    };
+    el.addEventListener("seeked", finish);
+    // Arama desteklenmiyorsa veya takılırsa kayıt tıkanmasın.
+    window.setTimeout(finish, 400);
+    try {
+      el.currentTime = target;
+    } catch {
+      finish();
+    }
+  });
+}
+
+/**
+ * Proje seslerini tek bir AudioBuffer'a offline miksajlar.
+ * Ses yoksa null döner (video sessiz üretilir, bu bir hata değildir).
+ */
+async function mixAudioOffline(opts: RecordOptions, totalSec: number): Promise<AudioBuffer | null> {
+  const { project, audio, voices } = opts;
+  const mix = project.audioMix ?? DEFAULT_AUDIO_MIX;
+
+  type Parca = { blob: Blob; offset: number; volume: number; loop: boolean };
+  const parcalar: Parca[] = [];
+
+  if (mix.musicEnabled && audio) {
+    parcalar.push({ blob: audio, offset: 0, volume: mix.musicVolume, loop: true });
+  }
+  if (mix.voiceEnabled && voices) {
+    for (const item of buildTimeline(project.scenes)) {
+      const id = item.scene.voiceAssetId;
+      const blob = id ? voices.get(id) : undefined;
+      if (blob) parcalar.push({ blob, offset: item.start, volume: mix.voiceVolume, loop: false });
+    }
+  }
+  if (parcalar.length === 0) return null;
+
+  const sampleRate = 48000;
+  const ctx = new OfflineAudioContext(2, Math.max(1, Math.ceil(totalSec * sampleRate)), sampleRate);
+
+  for (const p of parcalar) {
+    try {
+      const buf = await ctx.decodeAudioData(await p.blob.arrayBuffer());
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.loop = p.loop;
+      const gain = ctx.createGain();
+      gain.gain.value = p.volume;
+      src.connect(gain);
+      gain.connect(ctx.destination);
+      src.start(p.offset);
+      if (p.loop) src.stop(totalSec);
+    } catch (err) {
+      // Tek bir ses çözülemezse tamamını kaybetme; sessizce de yutma.
+      console.error("Ses parçası çözülemedi, atlanıyor:", err);
+    }
+  }
+
+  return ctx.startRendering();
+}
+
+/**
+ * Zaman çizelgesini kare kare kodlayarak video üretir.
+ * recordVideo ile aynı sözleşmeyi kullanır (onProgress, signal, RecordResult).
+ */
+export async function encodeVideoFast(opts: RecordOptions): Promise<RecordResult> {
+  const { project, media, onProgress, signal } = opts;
+
+  const timeline = buildTimeline(project.scenes);
+  if (timeline.length === 0) throw new Error("Kaydedilecek sahne yok.");
+  const total = timeline[timeline.length - 1].end;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = VIDEO_WIDTH;
+  canvas.height = VIDEO_HEIGHT;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas 2D bağlamı oluşturulamadı.");
+
+  const target = new BufferTarget();
+  const output = new Output({ format: new Mp4OutputFormat(), target });
+
+  const videoSource = new CanvasSource(canvas, { codec: "avc", bitrate: 6_000_000 });
+  output.addVideoTrack(videoSource);
+
+  // Ses videodan önce hazırlanır: burada patlarsa boş dosya üretmeyelim.
+  const mixed = await mixAudioOffline(opts, total);
+  let audioSource: AudioBufferSource | null = null;
+  if (mixed) {
+    audioSource = new AudioBufferSource({ codec: "aac", bitrate: 128_000 });
+    output.addAudioTrack(audioSource);
+  }
+
+  await output.start();
+
+  const frameDur = 1 / FPS;
+  const frameCount = Math.max(1, Math.round(total * FPS));
+  let activeIndex = -1;
+
+  try {
+    for (let i = 0; i < frameCount; i++) {
+      if (signal?.cancelled) {
+        await output.cancel();
+        throw new Error("Kayıt iptal edildi.");
+      }
+
+      const time = Math.min(i * frameDur, total - 0.001);
+
+      // Sahne değiştiyse video medyasını doğru konuma getir.
+      let index = timeline.findIndex((it) => time >= it.start && time < it.end);
+      if (index === -1) index = timeline.length - 1;
+      const item = timeline[index];
+      const el = item.scene.assetId ? media.get(item.scene.assetId) : undefined;
+      if (el instanceof HTMLVideoElement) {
+        if (index !== activeIndex) activeIndex = index;
+        await seekTo(el, time - item.start);
+      } else {
+        activeIndex = index;
+      }
+
+      renderFrame(ctx, timeline, time, media, project.subtitleStyle);
+      await videoSource.add(time, frameDur);
+
+      if (i % 5 === 0) onProgress?.(time / total, time);
+    }
+
+    if (audioSource && mixed) {
+      await audioSource.add(mixed);
+    }
+
+    onProgress?.(1, total);
+    await output.finalize();
+
+    const buffer = target.buffer;
+    if (!buffer || buffer.byteLength === 0) {
+      throw new Error("Kayıt boş döndü — video üretilemedi.");
+    }
+    return { blob: new Blob([buffer], { type: "video/mp4" }), ext: "mp4", durationSec: total };
+  } catch (err) {
+    if (output.state !== "finalized" && output.state !== "canceled") {
+      await output.cancel().catch(() => undefined);
+    }
+    throw err;
+  }
 }

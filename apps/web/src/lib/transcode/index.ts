@@ -74,39 +74,10 @@ export async function compress(
 
   const info = await analyze(file);
 
-  // showSaveFilePicker destekleniyorsa diske stream edebiliriz.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let fileHandle: any = null;
+  // showSaveFilePicker (doğrudan diske yazma) özelliği UX (önizleme) amacıyla devre dışı bırakıldı.
+  // İşlem bellekte (BufferTarget) tamamlanacak ki sonuç videoyu kullanıcıya anında gösterebilelim.
+  const useStream = false;
   let writable: FileSystemWritableFileStream | null = null;
-  let useStream = false;
-  
-  const ext = opts.container === "webm" ? ".webm" : (opts.container === "m4a" ? ".m4a" : ".mp4");
-  const defaultName = file.name.replace(/\.[^.]+$/, "") + "-kucuk" + ext;
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if (typeof (window as any).showSaveFilePicker === "function") {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      fileHandle = await (window as any).showSaveFilePicker({
-        suggestedName: defaultName,
-        types: [
-          {
-            description: "Video File",
-            accept: {
-              [opts.container === "webm" ? "video/webm" : "video/mp4"]: [ext],
-            },
-          },
-        ],
-      });
-      writable = await fileHandle.createWritable();
-      useStream = true;
-    } catch (err) {
-      if ((err as Error).name === "AbortError") {
-        throw new TranscodeCancelledError("İşlem iptal edildi.");
-      }
-      console.warn("Diske doğrudan yazma başlatılamadı, fallback (bellek) kullanılacak.", err);
-    }
-  }
 
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });

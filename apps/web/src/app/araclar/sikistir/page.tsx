@@ -375,21 +375,34 @@ export default function Sikistir() {
                         </>
                       )}
                     </div>
-                    {result.url ? (
+                    {result.url && (
                       <>
                         <video
                           src={result.url}
                           controls
-                          style={{ width: "100%", borderRadius: 12, background: "#000" }}
+                          style={{ width: "100%", borderRadius: 12, background: "#000", maxHeight: 400 }}
                         />
-                        <a className="btn btn-primary" href={result.url} download={result.name}>
-                          ⬇ İndir
-                        </a>
+                        <div className="row" style={{ gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                          <a className="btn btn-primary" style={{ flex: 1, textAlign: "center" }} href={result.url} download={result.name}>
+                            ⬇️ Videoyu İndir
+                          </a>
+                          <button
+                            className="btn"
+                            style={{ flex: 1, backgroundColor: "var(--bg-card)", border: "1px solid var(--border)" }}
+                            onClick={() => {
+                              setPhase("bekliyor");
+                              setFile(null);
+                              setInfo(null);
+                              setResult(null);
+                            }}
+                          >
+                            🔄 Yeni Video
+                          </button>
+                          <Link href="/new" className="btn" style={{ flex: 1, backgroundColor: "var(--bg-card)", border: "1px solid var(--border)", textAlign: "center" }}>
+                            🎬 Stüdyoya Git
+                          </Link>
+                        </div>
                       </>
-                    ) : (
-                      <div className="notice notice-ok" style={{ textAlign: "center" }}>
-                        ✅ Video doğrudan cihazınıza kaydedildi. Yeniden indirmeye gerek yok!
-                      </div>
                     )}
                   </div>
                 )}
