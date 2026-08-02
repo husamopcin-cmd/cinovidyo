@@ -12,6 +12,7 @@ import {
   estimateSize,
   formatBytes,
   formatDuration,
+  isAlreadySmall,
   targetDimensions,
   type CompressOptions,
   type MediaInfo,
@@ -292,11 +293,18 @@ export default function Sikistir() {
                   </label>
                 )}
 
-                {dims && (
-                  <div className="notice notice-ok">
+                {dims && opts && (
+                  <div className={`notice ${savingPct > 0 ? "notice-ok" : ""}`}>
                     Tahmini sonuç: <strong>{formatBytes(estimate)}</strong> · {dims.width}×
                     {dims.height}
                     {savingPct > 0 && <> · yaklaşık %{savingPct} küçülme</>}
+                    {isAlreadySmall(info, opts) && (
+                      <div className="tiny" style={{ marginTop: 6 }}>
+                        <strong>Not:</strong> Bu video zaten seçtiğin ayardan daha düşük kalitede.
+                        Kaliteyi yapay olarak yükseltmiyoruz (dosyayı büyütürdü), bu yüzden kazanç
+                        sınırlı olacak.
+                      </div>
+                    )}
                     <div className="tiny" style={{ marginTop: 4 }}>
                       Tahmindir; gerçek boyut görüntü karmaşıklığına göre değişir.
                     </div>
@@ -341,13 +349,22 @@ export default function Sikistir() {
 
                 {result && phase === "bitti" && (
                   <div className="stack" style={{ gap: 12 }}>
-                    <div className="notice notice-ok">
+                    <div
+                      className={`notice ${result.sizeBytes < info.sizeBytes ? "notice-ok" : "notice-error"}`}
+                    >
                       Bitti — <strong>{formatBytes(result.sizeBytes)}</strong>
-                      {info.sizeBytes > result.sizeBytes && (
+                      {result.sizeBytes < info.sizeBytes ? (
                         <>
                           {" "}
                           · {formatBytes(info.sizeBytes)} idi, %
                           {Math.round((1 - result.sizeBytes / info.sizeBytes) * 100)} küçüldü
+                        </>
+                      ) : (
+                        <>
+                          {" "}
+                          · özgün dosya {formatBytes(info.sizeBytes)} idi —{" "}
+                          <strong>bu ayar küçültmedi</strong>. Video zaten iyi sıkıştırılmış; daha
+                          düşük bir hedef seç veya özgün dosyayı kullan.
                         </>
                       )}
                     </div>

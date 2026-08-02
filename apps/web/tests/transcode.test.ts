@@ -3,9 +3,11 @@ import test from "node:test";
 
 import {
   PRESETS,
+  effectiveVideoBitrate,
   estimateSize,
   formatBytes,
   formatDuration,
+  isAlreadySmall,
   targetDimensions,
   type MediaInfo,
 } from "../src/lib/transcode";
@@ -98,6 +100,57 @@ test("hazır profiller gerçekten küçülme sağlar", () => {
       `${p.id} profili girdiden küçük olmalı (${tahmin} < ${ORNEK.sizeBytes})`
     );
   }
+});
+
+/** Zaten iyi sıkıştırılmış, düşük bit hızlı kaynak. */
+const ZATEN_KUCUK: MediaInfo = {
+  durationSec: 23,
+  width: 640,
+  height: 360,
+  videoCodec: "avc",
+  audioCodec: null,
+  sizeBytes: 399_000,
+  bitrateBps: 138_000,
+  hasAudio: false,
+};
+
+test("hedef bit hızı kaynağın üstüne çıkamaz", () => {
+  // 2.5 Mbps istense de kaynak ~138 kbps olduğu için kırpılmalı
+  const gercek = effectiveVideoBitrate(ZATEN_KUCUK, 2_500_000);
+  assert.ok(gercek < 2_500_000, "istenen bit hızı kırpılmalı");
+  assert.ok(gercek <= ZATEN_KUCUK.bitrateBps, "kaynak bit hızını aşmamalı");
+});
+
+test("kaynaktan düşük hedef istenirse olduğu gibi kullanılır", () => {
+  assert.equal(effectiveVideoBitrate(ORNEK, 1_000_000), 1_000_000);
+  assert.equal(isAlreadySmall(ORNEK, {
+    maxDimension: 1280,
+    videoBitrate: 1_000_000,
+    audioBitrate: 96_000,
+  }), false);
+});
+
+test("zaten küçük video için kullanıcı uyarısı tetiklenir", () => {
+  assert.equal(
+    isAlreadySmall(ZATEN_KUCUK, {
+      maxDimension: 1920,
+      videoBitrate: 2_500_000,
+      audioBitrate: 128_000,
+    }),
+    true
+  );
+});
+
+test("zaten küçük videoda tahmin dosyayı büyütmez", () => {
+  const tahmin = estimateSize(ZATEN_KUCUK, {
+    maxDimension: 1920,
+    videoBitrate: 2_500_000,
+    audioBitrate: 128_000,
+  });
+  assert.ok(
+    tahmin <= ZATEN_KUCUK.sizeBytes,
+    `tahmin (${tahmin}) kaynaktan (${ZATEN_KUCUK.sizeBytes}) büyük olmamalı`
+  );
 });
 
 test("bayt biçimlendirme birimleri doğru seçer", () => {

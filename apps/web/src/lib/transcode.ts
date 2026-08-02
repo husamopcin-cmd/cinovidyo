@@ -178,12 +178,32 @@ export type CompressOptions = {
 };
 
 /**
+ * Kullanılacak gerçek video bit hızı.
+ *
+ * Hedef, kaynağın kendi bit hızından yüksekse yükseltmenin anlamı yoktur:
+ * kalite artmaz (kayıp zaten olmuş), dosya büyür. Bu yüzden kaynağın üstüne
+ * çıkmayacak şekilde kırpılır — kullanıcı "sıkıştırdım ama dosya büyüdü"
+ * durumuna düşmesin.
+ */
+export function effectiveVideoBitrate(info: MediaInfo, requested: number): number {
+  const audioShare = info.hasAudio ? 128_000 : 0;
+  const sourceVideoBitrate = Math.max(100_000, info.bitrateBps - audioShare);
+  return Math.min(requested, sourceVideoBitrate);
+}
+
+/** Seçilen ayar kaynaktan daha kaliteli mi? (yani sıkıştırma etkisiz kalır) */
+export function isAlreadySmall(info: MediaInfo, opts: CompressOptions): boolean {
+  return effectiveVideoBitrate(info, opts.videoBitrate) < opts.videoBitrate;
+}
+
+/**
  * Çıktı boyutunu işlemden ÖNCE tahmin eder (bit hızı × süre).
  * Gerçek sonuç sahne karmaşıklığına göre değişir; bu yüzden "tahmini" denir.
  */
 export function estimateSize(info: MediaInfo, opts: CompressOptions): number {
   const audio = opts.removeAudio || !info.hasAudio ? 0 : opts.audioBitrate;
-  return Math.round(((opts.videoBitrate + audio) * info.durationSec) / 8);
+  const video = effectiveVideoBitrate(info, opts.videoBitrate);
+  return Math.round(((video + audio) * info.durationSec) / 8);
 }
 
 /**
@@ -250,7 +270,12 @@ export async function compress(
   const conversion = await Conversion.init({
     input,
     output,
-    video: { width, height, bitrate: opts.videoBitrate, fit: "contain" },
+    video: {
+      width,
+      height,
+      bitrate: effectiveVideoBitrate(info, opts.videoBitrate),
+      fit: "contain",
+    },
     audio: opts.removeAudio ? { discard: true } : { bitrate: opts.audioBitrate },
   });
 
