@@ -34,7 +34,7 @@ export default function Sikistir() {
   const [removeAudio, setRemoveAudio] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
-  const [result, setResult] = useState<{ url: string; sizeBytes: number; name: string } | null>(
+  const [result, setResult] = useState<{ url?: string; sizeBytes: number; name: string } | null>(
     null
   );
 
@@ -102,9 +102,16 @@ export default function Sikistir() {
         signal: cancelRef.current,
       });
 
-      if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current);
-      const url = URL.createObjectURL(res.blob);
-      resultUrlRef.current = url;
+      if (resultUrlRef.current) {
+        URL.revokeObjectURL(resultUrlRef.current);
+        resultUrlRef.current = null;
+      }
+      
+      let url: string | undefined;
+      if (res.blob) {
+        url = URL.createObjectURL(res.blob);
+        resultUrlRef.current = url;
+      }
 
       const base = file.name.replace(/\.[^.]+$/, "");
       setResult({ url, sizeBytes: res.sizeBytes, name: `${base}-kucuk.mp4` });
@@ -368,14 +375,22 @@ export default function Sikistir() {
                         </>
                       )}
                     </div>
-                    <video
-                      src={result.url}
-                      controls
-                      style={{ width: "100%", borderRadius: 12, background: "#000" }}
-                    />
-                    <a className="btn btn-primary" href={result.url} download={result.name}>
-                      ⬇ İndir
-                    </a>
+                    {result.url ? (
+                      <>
+                        <video
+                          src={result.url}
+                          controls
+                          style={{ width: "100%", borderRadius: 12, background: "#000" }}
+                        />
+                        <a className="btn btn-primary" href={result.url} download={result.name}>
+                          ⬇ İndir
+                        </a>
+                      </>
+                    ) : (
+                      <div className="notice notice-ok" style={{ textAlign: "center" }}>
+                        ✅ Video doğrudan cihazınıza kaydedildi. Yeniden indirmeye gerek yok!
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

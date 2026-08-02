@@ -1,0 +1,11 @@
+HTTP/1.1 200 OK
+Cache-Control: no-store
+Content-Type: audio/mpeg
+Date: Fri, 31 Jul 2026 06:09:35 GMT
+Server: Vercel
+Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+X-Matched-Path: /api/tts
+X-Vercel-Cache: MISS
+X-Vercel-Id: fra1::iad1::qmb62-1785478174603-1838a265ed7e
+Transfer-Encoding: chunked
+
