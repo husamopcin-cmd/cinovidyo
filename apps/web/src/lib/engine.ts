@@ -16,6 +16,14 @@ import {
   type Scene,
   type SubtitleStyle,
 } from "./types";
+import {
+  Output,
+  BufferTarget,
+  Mp4OutputFormat,
+  WebMOutputFormat,
+  MediaStreamVideoTrackSource,
+  MediaStreamAudioTrackSource
+} from "mediabunny";
 
 const FADE_SEC = 0.5;
 
@@ -641,14 +649,33 @@ export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
     }
   }
 
-  const recorder = new MediaRecorder(stream, {
-    mimeType: picked.mime,
-    videoBitsPerSecond: 6_000_000,
-  });
-  const chunks: BlobPart[] = [];
-  recorder.ondataavailable = (e) => {
-    if (e.data.size > 0) chunks.push(e.data);
-  };
+  const target = new BufferTarget();
+  const format = picked.ext === "webm" ? new WebMOutputFormat() : new Mp4OutputFormat();
+  const output = new Output({ format, target });
+
+  const videoTrack = stream.getVideoTracks()[0];
+  const videoSource = new MediaStreamVideoTrackSource(videoTrack, {
+    codec: picked.ext === "webm" ? "vp8" : "avc",
+    width: VIDEO_WIDTH,
+    height: VIDEO_HEIGHT,
+    bitrate: 6_000_000,
+    frameRate: FPS,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any, { timestampBase: "zero" });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (output as any).addTrack(videoSource);
+
+  const audioTrack = stream.getAudioTracks()[0];
+  if (audioTrack) {
+    const audioSource = new MediaStreamAudioTrackSource(audioTrack, {
+      codec: picked.ext === "webm" ? "opus" : "aac",
+      bitrate: 128_000,
+    }, { timestampBase: "zero" });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (output as any).addTrack(audioSource);
+  }
+
+  await output.start();
 
   const videoEls = new Set<HTMLVideoElement>();
   media.forEach((el) => {
@@ -666,33 +693,39 @@ export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
       stream.getTracks().forEach((t) => t.stop());
       gains.forEach((g) => g.disconnect());
       objectUrls.forEach((u) => URL.revokeObjectURL(u));
-      // paylaşılan AudioContext kapatılmaz: sonraki render'da tekrar kullanılır
     };
 
-    recorder.onerror = (e) => {
+    const stopRecorder = async () => {
       if (finished) return;
       finished = true;
       cleanup();
-      reject(
-        new Error(`Kayıt hatası: ${(e as unknown as { error?: Error }).error?.message ?? "bilinmeyen"}`)
-      );
-    };
-
-    recorder.onstop = () => {
-      if (finished) return;
-      finished = true;
-      cleanup();
+      
       if (cancelledByUser) {
+        await output.cancel().catch(() => {});
         reject(new Error("Kayıt iptal edildi."));
         return;
       }
-      const blob = new Blob(chunks, { type: picked.mime });
-      if (blob.size === 0) {
-        reject(new Error("Kayıt boş döndü — video üretilemedi."));
-        return;
+      
+      try {
+        await output.finalize();
+        const blob = new Blob([target.buffer || new ArrayBuffer(0)], { type: picked.mime });
+        if (blob.size === 0) {
+          reject(new Error("Kayıt boş döndü — video üretilemedi."));
+          return;
+        }
+        resolve({ blob, ext: picked.ext, durationSec: total });
+      } catch (e) {
+        reject(new Error(`Kayıt finalizasyon hatası: ${e instanceof Error ? e.message : "bilinmeyen"}`));
       }
-      resolve({ blob, ext: picked.ext, durationSec: total });
     };
+
+    // mediabunny kaynaklarındaki hataları yakala
+    videoSource.errorPromise.catch((e) => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      reject(new Error(`Video kaynak hatası: ${e instanceof Error ? e.message : "bilinmeyen"}`));
+    });
 
     let activeIndex = -1;
     const startedAt = performance.now();
@@ -701,10 +734,6 @@ export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
     let pausedAt: number | null = null;
 
     const elapsed = () => ((pausedAt ?? performance.now()) - startedAt - pausedTotal) / 1000;
-
-    const stopRecorder = () => {
-      if (recorder.state !== "inactive") recorder.stop();
-    };
 
     /**
      * Sekme arka plana alındığında requestAnimationFrame tamamen durur; bu yüzden
@@ -716,14 +745,18 @@ export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
       if (document.hidden) {
         if (pausedAt === null) {
           pausedAt = performance.now();
-          if (recorder.state === "recording") recorder.pause();
+          videoSource.pause();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          if (audioTrack) ((output as any).tracks.find((t: any) => t.source instanceof MediaStreamAudioTrackSource)?.source as any).pause();
           videoEls.forEach((v) => v.pause());
           ownedAudioEls.forEach((a) => a.pause());
         }
       } else if (pausedAt !== null) {
         pausedTotal += performance.now() - pausedAt;
         pausedAt = null;
-        if (recorder.state === "paused") recorder.resume();
+        videoSource.resume();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (audioTrack) ((output as any).tracks.find((t: any) => t.source instanceof MediaStreamAudioTrackSource)?.source as any).resume();
         activeIndex = -1; // sahne medyasını yeniden kur
         schedule();
       }
@@ -733,7 +766,7 @@ export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
       if (finished) return;
       if (signal?.cancelled) {
         cancelledByUser = true;
-        stopRecorder();
+        void stopRecorder();
         return;
       }
       if (document.hidden) {
@@ -748,7 +781,7 @@ export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
       if (finished || pausedAt !== null) return;
       if (signal?.cancelled) {
         cancelledByUser = true;
-        stopRecorder();
+        void stopRecorder();
         return;
       }
 
@@ -757,7 +790,7 @@ export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
         renderFrame(ctx, timeline, total - 0.001, media, project.subtitleStyle);
         onProgress?.(1, total);
         // son karenin akışa girmesi için küçük gecikme
-        window.setTimeout(stopRecorder, 150);
+        window.setTimeout(() => void stopRecorder(), 150);
         return;
       }
 
@@ -813,7 +846,6 @@ export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
       return;
     }
 
-    recorder.start(250);
     // müzik baştan sona çalar; seslendirmeler sahne sırası geldiğinde başlar
     if (musicEl) void musicEl.play().catch(() => undefined);
     schedule();
