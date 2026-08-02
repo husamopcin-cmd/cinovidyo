@@ -179,6 +179,10 @@ export default function SesAyikla() {
                   <strong>{info.width}×{info.height}</strong> · {formatDuration(info.durationSec)} · {formatBytes(info.sizeBytes)}
                 </div>
               )}
+              {/* Analiz hatası burada gösterilir: dosya çözülemediğinde info null
+                  olduğu için aşağıdaki adımlar hiç çizilmez; hata orada kalsaydı
+                  kullanıcı hiçbir açıklama görmeden tıkanırdı. */}
+              {error && !info && <div className="notice notice-error">{error}</div>}
             </div>
 
             {info && (

@@ -200,6 +200,10 @@ export default function Sikistir() {
                   {info.hasAudio ? " · sesli" : " · sessiz"}
                 </div>
               )}
+              {/* Analiz hatası burada gösterilir: dosya çözülemediğinde info null
+                  olduğu için aşağıdaki adımlar hiç çizilmez; hata orada kalsaydı
+                  kullanıcı hiçbir açıklama görmeden tıkanırdı. */}
+              {error && !info && <div className="notice notice-error">{error}</div>}
             </div>
 
             {/* 2 — Hedef */}

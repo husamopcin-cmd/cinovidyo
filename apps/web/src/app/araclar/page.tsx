@@ -27,7 +27,7 @@ const TOOLS = [
     href: "/araclar/kirp",
     icon: "✂️",
     title: "Kırp",
-    desc: "Videonun sadece istediğin bölümünü al.",
+    desc: "Yatay videoyu dikey (9:16), kare veya 16:9 formata kırp.",
     ready: true,
   },
   {
