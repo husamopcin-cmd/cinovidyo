@@ -7,6 +7,7 @@ import ThemeToggle from "./ThemeToggle";
 export default function TopBar() {
   const pathname = usePathname();
   const onProjects = pathname === "/projects";
+  const onTools = pathname?.startsWith("/araclar") ?? false;
 
   return (
     <header className="topbar">
@@ -23,6 +24,13 @@ export default function TopBar() {
         aria-current={onProjects ? "page" : undefined}
       >
         Projelerim
+      </Link>
+      <Link
+        href="/araclar"
+        className={`nav-link ${onTools ? "active" : ""}`}
+        aria-current={onTools ? "page" : undefined}
+      >
+        Araçlar
       </Link>
       <ThemeToggle />
       <Link href="/new" className="btn btn-primary btn-sm">

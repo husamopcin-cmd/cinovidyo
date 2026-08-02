@@ -1,0 +1,114 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  PRESETS,
+  estimateSize,
+  formatBytes,
+  formatDuration,
+  targetDimensions,
+  type MediaInfo,
+} from "../src/lib/transcode";
+
+/** 10 dakikalık, 1080p, sesli örnek girdi. */
+const ORNEK: MediaInfo = {
+  durationSec: 600,
+  width: 1920,
+  height: 1080,
+  videoCodec: "avc",
+  audioCodec: "aac",
+  sizeBytes: 750_000_000,
+  bitrateBps: 10_000_000,
+  hasAudio: true,
+};
+
+test("boyut tahmini bit hızı ve süreyle doğru orantılı hesaplanır", () => {
+  const tahmin = estimateSize(ORNEK, {
+    maxDimension: 1280,
+    videoBitrate: 1_000_000,
+    audioBitrate: 96_000,
+  });
+  // (1_000_000 + 96_000) * 600 / 8 = 82_200_000
+  assert.equal(tahmin, 82_200_000);
+});
+
+test("ses kaldırılınca tahmin yalnızca video bit hızından hesaplanır", () => {
+  const sesli = estimateSize(ORNEK, {
+    maxDimension: null,
+    videoBitrate: 2_000_000,
+    audioBitrate: 128_000,
+  });
+  const sessiz = estimateSize(ORNEK, {
+    maxDimension: null,
+    videoBitrate: 2_000_000,
+    audioBitrate: 128_000,
+    removeAudio: true,
+  });
+  assert.ok(sessiz < sesli, "sessiz çıktı daha küçük olmalı");
+  assert.equal(sessiz, (2_000_000 * 600) / 8);
+});
+
+test("sesi olmayan videoda ses bit hızı tahmine eklenmez", () => {
+  const sessizKaynak: MediaInfo = { ...ORNEK, hasAudio: false, audioCodec: null };
+  const tahmin = estimateSize(sessizKaynak, {
+    maxDimension: null,
+    videoBitrate: 1_000_000,
+    audioBitrate: 128_000,
+  });
+  assert.equal(tahmin, (1_000_000 * 600) / 8);
+});
+
+test("hedef çözünürlük en-boy oranını korur ve çift sayıya yuvarlar", () => {
+  const { width, height } = targetDimensions(ORNEK, 1280);
+  assert.equal(width, 1280);
+  assert.equal(height, 720);
+  assert.equal(width % 2, 0);
+  assert.equal(height % 2, 0);
+});
+
+test("dikey video sığdırılırken uzun kenar esas alınır", () => {
+  const dikey: MediaInfo = { ...ORNEK, width: 1080, height: 1920 };
+  const { width, height } = targetDimensions(dikey, 1280);
+  assert.equal(height, 1280, "uzun kenar hedefe inmeli");
+  assert.equal(width, 720);
+});
+
+test("kaynak hedeften küçükse video büyütülmez", () => {
+  const kucuk: MediaInfo = { ...ORNEK, width: 640, height: 360 };
+  const { width, height } = targetDimensions(kucuk, 1920);
+  assert.equal(width, 640, "küçük video büyütülmemeli");
+  assert.equal(height, 360);
+});
+
+test("maxDimension yoksa özgün çözünürlük korunur", () => {
+  const { width, height } = targetDimensions(ORNEK, null);
+  assert.equal(width, 1920);
+  assert.equal(height, 1080);
+});
+
+test("hazır profiller gerçekten küçülme sağlar", () => {
+  for (const p of PRESETS) {
+    const tahmin = estimateSize(ORNEK, {
+      maxDimension: p.maxDimension,
+      videoBitrate: p.videoBitrate,
+      audioBitrate: p.audioBitrate,
+    });
+    assert.ok(
+      tahmin < ORNEK.sizeBytes,
+      `${p.id} profili girdiden küçük olmalı (${tahmin} < ${ORNEK.sizeBytes})`
+    );
+  }
+});
+
+test("bayt biçimlendirme birimleri doğru seçer", () => {
+  assert.equal(formatBytes(512), "512 B");
+  assert.equal(formatBytes(2048), "2 KB");
+  assert.equal(formatBytes(5 * 1024 * 1024), "5.0 MB");
+  assert.equal(formatBytes(3 * 1024 * 1024 * 1024), "3.00 GB");
+});
+
+test("süre biçimlendirme saat eşiğini doğru aşar", () => {
+  assert.equal(formatDuration(45), "0:45");
+  assert.equal(formatDuration(605), "10:05");
+  assert.equal(formatDuration(3661), "1:01:01");
+});
