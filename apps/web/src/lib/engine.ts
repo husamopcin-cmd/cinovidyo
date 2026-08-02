@@ -840,7 +840,7 @@ export async function recordVideo(opts: RecordOptions): Promise<RecordResult> {
       cleanup();
       reject(
         new Error(
-          "Kayıt başlatılamadı: sekme arka planda. CinoVidyo sekmesini görünür tut ve tekrar dene."
+          "Kayıt başlatılamadı: sekme arka planda. CinoVid sekmesini görünür tut ve tekrar dene."
         )
       );
       return;

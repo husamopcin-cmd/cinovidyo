@@ -149,7 +149,7 @@ export async function exportProjectBackup(id: string): Promise<Blob> {
 export async function importProjectBackup(file: File): Promise<Project> {
   const backup = JSON.parse(await file.text()) as Partial<ProjectBackup>;
   if (backup.format !== "cinovid-project" || backup.version !== 1 || !backup.project) {
-    throw new Error("Bu dosya geçerli bir CinoVidyo proje yedeği değil.");
+    throw new Error("Bu dosya geçerli bir CinoVid proje yedeği değil.");
   }
   const project = backup.project;
   await saveProject(project);

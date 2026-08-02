@@ -14,7 +14,7 @@ export default function TopBar() {
       <Link href="/" className="brand" aria-current={pathname === "/" ? "page" : undefined}>
         <span className="brand-dot">◈</span>
         <span>
-          CinoVidyo <span className="grad">AI Studio</span>
+          CinoVid <span className="grad">AI Studio</span>
         </span>
       </Link>
       <div className="spacer" />

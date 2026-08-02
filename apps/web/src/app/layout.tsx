@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "CinoVidyo AI Studio — Tarayıcıda AI destekli dikey video stüdyosu",
+  title: "CinoVid AI Studio — Tarayıcıda AI destekli dikey video stüdyosu",
   description:
     "Metin, PDF ders notu, görsel veya videodan 9:16 dikey video üret. Her şey tarayıcında çalışır: sunucu yok, hesap yok, ücret yok.",
 };
