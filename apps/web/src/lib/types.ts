@@ -1,4 +1,4 @@
-// CinoVid AI Studio — istemci tarafı veri modelleri.
+// CinoVidyo AI Studio — istemci tarafı veri modelleri.
 // Tüm veriler kullanıcının tarayıcısında (IndexedDB) tutulur; sunucu veritabanı yoktur.
 
 export type Motion = "none" | "zoom_in" | "zoom_out" | "pan_left" | "pan_right";
