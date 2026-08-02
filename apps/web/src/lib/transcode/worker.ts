@@ -52,7 +52,9 @@ self.addEventListener("message", async (e: MessageEvent) => {
     } else if (type === "compress") {
       const { file, options, useStream, info } = payload;
       
-      const { width, height } = targetDimensions(info, options.maxDimension);
+      const width = options.cropWidth || targetDimensions(info, options.maxDimension).width;
+      const height = options.cropHeight || targetDimensions(info, options.maxDimension).height;
+      const fit = options.fit || (options.cropWidth ? "cover" : "contain");
 
       const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(file) });
       
@@ -73,11 +75,11 @@ self.addEventListener("message", async (e: MessageEvent) => {
       const conversion = await Conversion.init({
         input,
         output,
-        video: {
+        video: options.extractAudioOnly ? { discard: true } : {
           width,
           height,
           bitrate: effectiveVideoBitrate(info, options.videoBitrate),
-          fit: "contain",
+          fit,
         },
         audio: options.removeAudio ? { discard: true } : { bitrate: options.audioBitrate },
       });

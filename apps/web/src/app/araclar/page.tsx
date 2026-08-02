@@ -17,22 +17,25 @@ const TOOLS = [
     ready: true,
   },
   {
+    href: "/araclar/donustur",
     icon: "📐",
     title: "Çözünürlük / format",
     desc: "4K'yı 1080p yap, MP4 ↔ WebM dönüştür.",
-    ready: false,
+    ready: true,
   },
   {
+    href: "/araclar/kirp",
     icon: "✂️",
     title: "Kırp",
     desc: "Videonun sadece istediğin bölümünü al.",
-    ready: false,
+    ready: true,
   },
   {
+    href: "/araclar/ses",
     icon: "🎵",
     title: "Sesi ayıkla",
-    desc: "Videodan sesi MP3 olarak çıkar veya sesi kaldır.",
-    ready: false,
+    desc: "Videodan sesi çıkar veya tamamen kaldır.",
+    ready: true,
   },
 ];
 

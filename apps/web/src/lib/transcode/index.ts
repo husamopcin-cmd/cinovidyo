@@ -80,7 +80,7 @@ export async function compress(
   let writable: FileSystemWritableFileStream | null = null;
   let useStream = false;
   
-  const ext = opts.container === "webm" ? ".webm" : ".mp4";
+  const ext = opts.container === "webm" ? ".webm" : (opts.container === "m4a" ? ".m4a" : ".mp4");
   const defaultName = file.name.replace(/\.[^.]+$/, "") + "-kucuk" + ext;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

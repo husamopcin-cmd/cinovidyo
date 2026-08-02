@@ -52,7 +52,16 @@ export type CompressOptions = {
   videoBitrate: number;
   audioBitrate: number;
   removeAudio?: boolean;
-  container?: "mp4" | "webm";
+  container?: "mp4" | "webm" | "m4a";
+  // Kırpma (Zaman)
+  trimStartSec?: number;
+  trimEndSec?: number;
+  // Kırpma (Görüntü)
+  cropWidth?: number;
+  cropHeight?: number;
+  fit?: "contain" | "cover" | "fill";
+  // Ses Ayıklama
+  extractAudioOnly?: boolean;
 };
 
 export type CompressResult = {
