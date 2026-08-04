@@ -92,8 +92,9 @@ Durum anahtarı: **TAMAM** = test edilerek doğrulandı · **KISMİ** = çalış
 | FR-31 | Gerçek zamandan hızlı üretim | TAMAM — 30 sn'lik video ~21-25 sn'de |
 | FR-32 | Sekme arka plandayken de çalışma | TAMAM — gizli sekmede doğrulandı |
 | FR-33 | Müzik sesinin videoya gömülmesi | TAMAM — stereo 48 kHz, genlik 0.0455 ölçüldü |
-| FR-34 | Sahne videosunun kendi sesinin gömülmesi | TAMAM — doğru zaman penceresinde enerji 0.408 ölçüldü |
-| FR-35 | TTS seslendirmesinin videoya gömülmesi | KISMİ — kod yolu var, **hızlı yolda uçtan uca test edilmedi** |
+| FR-34 | Sahne videosunun kendi sesinin gömülmesi | TAMAM — doğru pencerede enerji 0.405; sahne dışı tam sessiz |
+| FR-35 | TTS seslendirmesinin videoya gömülmesi | KISMİ — kod yolu artık dayanıklı çözücüyü kullanıyor (R2 kapandı), ancak **TTS'li proje uçtan uca ölçülmedi** |
+| FR-38 | Ses seviyesi ayarının çıktıya yansıması | TAMAM — %65→0.4051, %20→0.12689; teorik değerle birebir |
 | FR-36 | İlerleme göstergesi ve iptal | TAMAM |
 | FR-37 | Hızlı yol başarısız olursa gerçek zamanlı yola düşme | TAMAM — kullanıcıya bildirilerek |
 
@@ -161,7 +162,7 @@ Durum anahtarı: **TAMAM** = test edilerek doğrulandı · **KISMİ** = çalış
 | # | Risk | Etki | Notlar |
 |---|---|---|---|
 | R1 | `showSaveFilePicker` devre dışı | Çok büyük dosyalar bellekte toplanır (>1-2 GB sorun olabilir) | Önizleme gösterebilmek için bilinçli kapatıldı |
-| R2 | TTS seslendirmesi hızlı export'ta `decodeAudioData` kullanıyor | Bazı ses formatlarında sessizce atlanabilir | Video sesinde bu hata **yaşandı ve düzeltildi**; ses yolu henüz aynı sağlamlıkta değil |
+| ~~R2~~ | ~~Seslendirme `decodeAudioData` kullanıyor~~ | — | **KAPANDI** — tüm ses kaynakları `decodeAudioParts()` ile önce native, olmazsa mediabunny yolunu kullanıyor |
 | R3 | ffprobe/ffmpeg ile bağımsız doğrulama yapılmadı | V1 etiketi resmen açık | ffmpeg bu makinede kurulu değil |
 | R4 | Safari/Firefox/mobil test edilmedi | Bilinmeyen uyumluluk | Chrome/Edge dışında garanti verilmiyor |
 | R5 | Yol haritası "zaman kırpma" vaat ediyor, araç yapmıyor | Kullanıcı beklentisi karşılanmıyor | FR-55 |
@@ -174,8 +175,8 @@ Durum anahtarı: **TAMAM** = test edilerek doğrulandı · **KISMİ** = çalış
 1. **FR-35**: TTS seslendirmeli çok sahneli projeyi hızlı yolda uçtan uca test et; sesin doğru
    sahnede olduğunu enerji ölçümüyle kanıtla.
 2. **FR-56/57**: Ses ayıkla ve sesi kaldır araçlarını gerçek sesli dosyayla test et.
-3. **R2**: Seslendirme yolunu da `decodeAudioData` yerine mediabunny'ye taşı (video sesinde
-   yaşanan hatanın aynısı burada da mümkün).
+3. ~~**R2**: Seslendirme yolunu mediabunny'ye taşı~~ — **YAPILDI** (`decodeAudioParts`,
+   commit `a118c5d`); ölçümle doğrulandı.
 
 ### P1 — Eksik özellik
 4. **FR-55**: Zaman kırpma. Motor zaten destekliyor (`Conversion.init({ trim: {start, end} })`),
