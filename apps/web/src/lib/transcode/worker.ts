@@ -94,9 +94,15 @@ self.addEventListener("message", async (e: MessageEvent) => {
       if (!useStream) {
         const bufferTarget = target as BufferTarget;
         if (!bufferTarget.buffer) throw new Error("Sıkıştırma çıktı üretmedi.");
-        const blob = new Blob([bufferTarget.buffer], {
-          type: options.container === "webm" ? "video/webm" : "video/mp4",
-        });
+        // extractAudioOnly çıktısında video izi yok; "video/mp4" olarak etiketlemek
+        // yanıltıcı olur (bazı oynatıcılar/OS'ler ses dosyası olarak tanımayabilir).
+        const mime =
+          options.container === "webm"
+            ? "video/webm"
+            : options.extractAudioOnly
+              ? "audio/mp4"
+              : "video/mp4";
+        const blob = new Blob([bufferTarget.buffer], { type: mime });
         self.postMessage({ id, type: "success", result: { blob, sizeBytes: blob.size, width, height, durationSec: info.durationSec } });
       } else {
         self.postMessage({ id, type: "success", result: { sizeBytes: 0 /* Will be handled by main thread */, width, height, durationSec: info.durationSec } });

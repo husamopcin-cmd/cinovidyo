@@ -701,6 +701,7 @@ export default function Editor({ params }: { params: Promise<{ id: string }> }) 
         media,
         audio: audioAsset?.blob,
         voices: voiceBlobs,
+        assets,
         signal: cancelRef.current,
         onProgress: (ratio: number) => setProgress(Math.min(1, ratio)),
       };

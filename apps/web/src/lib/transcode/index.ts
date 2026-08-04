@@ -65,14 +65,17 @@ export type CompressHandlers = {
 export async function compress(
   file: File,
   opts: CompressOptions,
-  handlers: CompressHandlers = {}
+  handlers: CompressHandlers = {},
+  /** Çağıran taraf dosyayı zaten analyze() ettiyse burada geçebilir —
+   *  aynı dosyayı worker'da ikinci kez analiz etmekten kaçınır. */
+  precomputedInfo?: MediaInfo
 ): Promise<CompressResult> {
   const support = await checkSupport();
   if (!support.supported) {
     throw new TranscodeUnsupportedError(support.reason ?? "Video işleme desteklenmiyor.");
   }
 
-  const info = await analyze(file);
+  const info = precomputedInfo ?? (await analyze(file));
 
   // showSaveFilePicker (doğrudan diske yazma) özelliği UX (önizleme) amacıyla devre dışı bırakıldı.
   // İşlem bellekte (BufferTarget) tamamlanacak ki sonuç videoyu kullanıcıya anında gösterebilelim.

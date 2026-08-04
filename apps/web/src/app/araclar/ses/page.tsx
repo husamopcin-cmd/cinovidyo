@@ -93,10 +93,12 @@ export default function SesAyikla() {
     cancelRef.current = { cancelled: false };
 
     try {
-      const res = await compress(file, currentOptions(), {
-        onProgress: setProgress,
-        signal: cancelRef.current,
-      });
+      const res = await compress(
+        file,
+        currentOptions(),
+        { onProgress: setProgress, signal: cancelRef.current },
+        info
+      );
 
       if (resultUrlRef.current) {
         URL.revokeObjectURL(resultUrlRef.current);
@@ -260,7 +262,7 @@ export default function SesAyikla() {
                           </a>
                           <button
                             className="btn"
-                            style={{ flex: 1, backgroundColor: "var(--bg-card)", border: "1px solid var(--border)" }}
+                            style={{ flex: 1 }}
                             onClick={() => {
                               setPhase("bekliyor");
                               setFile(null);
@@ -270,7 +272,7 @@ export default function SesAyikla() {
                           >
                             🔄 Yeni Dosya
                           </button>
-                          <Link href="/new" className="btn" style={{ flex: 1, backgroundColor: "var(--bg-card)", border: "1px solid var(--border)", textAlign: "center" }}>
+                          <Link href="/new" className="btn" style={{ flex: 1, textAlign: "center" }}>
                             🎬 Stüdyoya Git
                           </Link>
                         </div>
