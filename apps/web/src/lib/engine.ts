@@ -909,6 +909,47 @@ function seekTo(el: HTMLVideoElement, time: number): Promise<void> {
 }
 
 /**
+ * Bir ses/video blob'unu AudioBuffer'lara çözer.
+ *
+ * Önce tarayıcının `decodeAudioData`'sı denenir (tek parça, hızlı). Başarısız
+ * olursa mediabunny'nin demux/decode hattına düşülür.
+ *
+ * Bu iki aşama gerekli: `decodeAudioData` bazı gerçek dosyalarda —özellikle
+ * MediaRecorder'ın ürettiği MP4'lerde— "Unable to decode audio data" ile
+ * reddediyor; aynı dosyayı mediabunny sorunsuz okuyor. Bu durum sahne videosu
+ * sesinde bizzat yaşandı ve sesin sessizce kaybolmasına yol açmıştı.
+ *
+ * Dönen parçalar blob içindeki göreli zamanlarıyla birlikte verilir; çağıran
+ * taraf bunları zaman çizelgesindeki yerine kaydırır.
+ */
+async function decodeAudioParts(
+  ctx: BaseAudioContext,
+  blob: Blob,
+  maxSec?: number
+): Promise<{ buffer: AudioBuffer; offset: number }[]> {
+  try {
+    const buf = await ctx.decodeAudioData(await blob.arrayBuffer());
+    return [{ buffer: buf, offset: 0 }];
+  } catch {
+    // Native çözücü reddetti — mediabunny ile dene.
+  }
+
+  const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(blob) });
+  try {
+    const track = await input.getPrimaryAudioTrack();
+    if (!track) return []; // ses izi yok — hata değil
+    const sink = new AudioBufferSink(track);
+    const out: { buffer: AudioBuffer; offset: number }[] = [];
+    for await (const chunk of sink.buffers(0, maxSec)) {
+      out.push({ buffer: chunk.buffer, offset: chunk.timestamp });
+    }
+    return out;
+  } finally {
+    input.dispose();
+  }
+}
+
+/**
  * Proje seslerini tek bir AudioBuffer'a offline miksajlar.
  * Ses yoksa null döner (video sessiz üretilir, bu bir hata değildir).
  */
@@ -936,16 +977,27 @@ async function mixAudioOffline(opts: RecordOptions, totalSec: number): Promise<A
 
   for (const p of parcalar) {
     try {
-      const buf = await ctx.decodeAudioData(await p.blob.arrayBuffer());
-      const src = ctx.createBufferSource();
-      src.buffer = buf;
-      src.loop = p.loop;
-      const gain = ctx.createGain();
-      gain.gain.value = p.volume;
-      src.connect(gain);
-      gain.connect(ctx.destination);
-      src.start(p.offset);
-      if (p.loop) src.stop(totalSec);
+      const parts = await decodeAudioParts(ctx, p.blob);
+      if (parts.length === 0) {
+        console.error("Ses parçasında çözülebilir ses izi yok, atlanıyor.");
+        continue;
+      }
+      for (const part of parts) {
+        const src = ctx.createBufferSource();
+        src.buffer = part.buffer;
+        // Döngü yalnızca tek parça hâlinde çözülen müzikte anlamlıdır; parçalı
+        // çözümde her parça kendi zamanına yerleştirilir.
+        src.loop = p.loop && parts.length === 1;
+        const gain = ctx.createGain();
+        gain.gain.value = p.volume;
+        src.connect(gain);
+        gain.connect(ctx.destination);
+        const at = p.offset + part.offset;
+        if (at < totalSec) {
+          src.start(at);
+          if (src.loop) src.stop(totalSec);
+        }
+      }
     } catch (err) {
       // Tek bir ses çözülemezse tamamını kaybetme; sessizce de yutma.
       console.error("Ses parçası çözülemedi, atlanıyor:", err);
@@ -955,13 +1007,7 @@ async function mixAudioOffline(opts: RecordOptions, totalSec: number): Promise<A
   // Sahneye yüklenen videonun kendi sesi. Canlı önizlemede (recordVideo) bu,
   // <video> elemanının kendi oynatımından alınıyordu; hızlı yolda video hiç
   // oynatılmadığı (kare kare çizildiği) için aynı ses ayrıca çıkarılıp sahne
-  // penceresine yerleştirilir.
-  //
-  // Not: burada tarayıcının `decodeAudioData`'sı DEĞİL, mediabunny'nin kendi
-  // demux/decode hattı (AudioBufferSink) kullanılıyor. Denendi ve doğrulandı:
-  // MediaRecorder'ın ürettiği MP4'ler gibi bazı gerçek dosyalarda
-  // `decodeAudioData` "Unable to decode audio data" ile başarısız oluyor —
-  // aynı dosyayı `compress`/`analyze` zaten mediabunny ile sorunsuz okuyor.
+  // penceresine yerleştirilir. Sahne süresinden uzun kısım alınmaz.
   if (mix.videoEnabled && assets) {
     for (const item of buildTimeline(project.scenes)) {
       const assetId = item.scene.assetId;
@@ -970,26 +1016,25 @@ async function mixAudioOffline(opts: RecordOptions, totalSec: number): Promise<A
       if (!asset) continue;
 
       const sceneDur = item.end - item.start;
-      const input = new Input({ formats: ALL_FORMATS, source: new BlobSource(asset.blob) });
       try {
-        const track = await input.getPrimaryAudioTrack();
-        if (!track) continue; // sesi olmayan video — beklenen durum, hata değil
-
-        const sink = new AudioBufferSink(track);
-        for await (const chunk of sink.buffers(0, sceneDur)) {
+        const parts = await decodeAudioParts(ctx, asset.blob, sceneDur);
+        for (const part of parts) {
+          if (part.offset >= sceneDur) continue;
           const src = ctx.createBufferSource();
-          src.buffer = chunk.buffer;
+          src.buffer = part.buffer;
           const gain = ctx.createGain();
           gain.gain.value = mix.videoVolume;
           src.connect(gain);
           gain.connect(ctx.destination);
-          const at = item.start + chunk.timestamp;
-          if (at >= 0 && at < totalSec) src.start(at);
+          const at = item.start + part.offset;
+          if (at >= 0 && at < totalSec) {
+            // Tek parça hâlinde çözüldüyse sahne penceresine sığdır.
+            if (parts.length === 1) src.start(at, 0, sceneDur);
+            else src.start(at);
+          }
         }
       } catch (err) {
         console.error("Sahne videosunun sesi çıkarılamadı, atlanıyor:", err);
-      } finally {
-        input.dispose();
       }
     }
   }
