@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import TopBar from "../../../components/TopBar";
 import {
@@ -15,6 +16,9 @@ import {
   type MediaInfo,
   type SupportInfo,
 } from "../../../lib/transcode";
+import { putAsset, saveProject } from "../../../lib/store";
+import { DEFAULT_SUBTITLE_STYLE, newId, type Asset, type Project } from "../../../lib/types";
+import { planFromAssets } from "../../../lib/planner";
 
 type Phase = "bekliyor" | "analiz" | "hazir" | "calisiyor" | "bitti";
 
@@ -28,11 +32,12 @@ export default function Kirp() {
   
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
-  const [result, setResult] = useState<{ url?: string; sizeBytes: number; name: string } | null>(null);
+  const [result, setResult] = useState<{ url?: string; sizeBytes: number; name: string; blob?: Blob } | null>(null);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const cancelRef = useRef<{ cancelled: boolean }>({ cancelled: false });
   const resultUrlRef = useRef<string | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     void checkSupport().then(setSupport);
@@ -85,6 +90,47 @@ export default function Kirp() {
     }
   }
 
+  async function sendToStudio() {
+    if (!result?.blob) return;
+    setError("");
+    setPhase("calisiyor");
+    try {
+      const projectId = newId("prj");
+      const assetId = newId("ast");
+      
+      const asset: Asset = {
+        id: assetId,
+        projectId,
+        name: result.name,
+        mime: result.blob.type || "video/mp4",
+        kind: "video",
+        blob: result.blob,
+        createdAt: new Date().toISOString(),
+      };
+      await putAsset(asset);
+      
+      const scenes = planFromAssets([asset], 8);
+      
+      const now = new Date().toISOString();
+      const project: Project = {
+        id: projectId,
+        name: "Kırpılmış Video",
+        source: "video",
+        scenes,
+        chat: [],
+        versions: [],
+        subtitleStyle: { ...DEFAULT_SUBTITLE_STYLE },
+        createdAt: now,
+        updatedAt: now,
+      };
+      await saveProject(project);
+      router.push(`/editor/${projectId}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Stüdyoya aktarılırken hata oluştu.");
+      setPhase("bitti");
+    }
+  }
+
   async function start() {
     if (!file || !info) return;
     setError("");
@@ -112,7 +158,7 @@ export default function Kirp() {
       }
 
       const base = file.name.replace(/\.[^.]+$/, "");
-      setResult({ url, sizeBytes: res.sizeBytes, name: `${base}-kirpildi.mp4` });
+      setResult({ url, sizeBytes: res.sizeBytes, name: `${base}-kirpildi.mp4`, blob: res.blob });
       setPhase("bitti");
     } catch (err) {
       setPhase("hazir");
@@ -259,9 +305,12 @@ export default function Kirp() {
                           >
                             🔄 Yeni Video
                           </button>
-                          <Link href="/new" className="btn" style={{ flex: 1, textAlign: "center" }}>
+                          <button
+                            className="btn" style={{ flex: 1 }}
+                            onClick={() => void sendToStudio()}
+                          >
                             🎬 Stüdyoya Git
-                          </Link>
+                          </button>
                         </div>
                       </>
                     )}
