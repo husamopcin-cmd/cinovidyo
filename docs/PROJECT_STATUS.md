@@ -12,7 +12,9 @@ CinoVid AI Studio, eski "ekran kaydı" (`MediaRecorder`) mantığından tamamen 
 - Ses miksajı `OfflineAudioContext` ve `mediabunny` ses çözücüleri ile senkronize edilip sorunsuz hale getirilmiştir.
 - 4 yeni Kardeş Araç (Sıkıştır, Kırp, Dönüştür, Ses Ayıkla) aktif edilmiş, testleri geçmiştir.
 
-V1.0.0 etiketlemesi için teknik veya mimari bir engel kalmamıştır. Bağımsız `ffprobe`/`ffmpeg` doğrulamaları (tarayıcı Blob dosyasının codec yapısını teyit etmek için) yapıldığı takdirde sürüm resmileşecektir.
+V1.0.0 için **mimari** engel kalmamıştır; ancak sürüm mühürlenmeden önce kapatılması gereken
+**doğrulama boşlukları** vardır (TTS miksajı, ses araçları, tarayıcı/mobil kabul testleri,
+bağımsız `ffprobe` analizi). Ayrıntılı liste ve öncelik sırası için bkz. [SRS.md](./SRS.md) §8.
 
 ## Tamamlanan Kritik Geliştirmeler (Ultra-Audit Sonrası)
 
@@ -39,8 +41,11 @@ V1.0.0 etiketlemesi için teknik veya mimari bir engel kalmamıştır. Bağıms�
 | Production Deployment | PASS — Ready |
 | Gizli Sekmede Render (rAF olmadan) | PASS (21.7s / 30s video) |
 | Çıktı Çözünürlüğü ve Parlaklık Testi | PASS (Siyah kare yok) |
-| Native Video Sesi ve TTS Miksajı | PASS |
-| 4 Kardeş Araç Canlı Testi | PASS |
+| Müzik miksajı | PASS (stereo 48 kHz, genlik 0.0455 ölçüldü) |
+| Sahne videosunun kendi sesi | PASS (30.0–30.9 sn penceresinde enerji 0.408, öncesi/sonrası sessiz) |
+| **TTS seslendirme miksajı** | **DOĞRULANMADI** — kod yolu mevcut, uçtan uca ölçüm yapılmadı |
+| Sıkıştır / Dönüştür / Kırp canlı testi | PASS (gerçek dosyalarla) |
+| **Ses Ayıkla / Sesi Kaldır** | **KISMİ** — yalnızca sessiz dosyayla hata yolu doğrulandı; sesli dosyayla çıktı üretimi test edilmedi |
 
 ## Kalan V1 Kapanış İşlemleri (İsteğe Bağlı Mühürleme)
 
