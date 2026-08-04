@@ -60,7 +60,7 @@ Durum anahtarı: **TAMAM** = test edilerek doğrulandı · **KISMİ** = çalış
 | FR-02 | Sektör şablonları (ürün, emlak, yemek, eğitim) | TAMAM |
 | FR-03 | Proje listeleme, açma, silme | TAMAM |
 | FR-04 | IndexedDB'de kalıcılık (tarayıcı kapansa da durur) | TAMAM |
-| FR-05 | Proje yedekleme / geri yükleme (dosyaya dışa aktarma) | TAMAM |
+| FR-05 | Proje yedekleme / geri yükleme (dosyaya dışa aktarma) | TAMAM — arayüz butonları mevcut; yedek JSON'u medyayı `dataUrl` (base64) olarak **gerçekten içeriyor**, çözülüp oynatıldı (320×180, 10.88 sn). Ölçek sınırı için bkz. R6 |
 | FR-06 | Cihaz depolama kotası göstergesi | TAMAM |
 
 ### 4.2 Stüdyo — Sahne editörü
@@ -167,6 +167,7 @@ Durum anahtarı: **TAMAM** = test edilerek doğrulandı · **KISMİ** = çalış
 | R3 | ffprobe/ffmpeg ile bağımsız doğrulama yapılmadı | V1 etiketi resmen açık | ffmpeg bu makinede kurulu değil |
 | R4 | Safari/Firefox/mobil test edilmedi | Bilinmeyen uyumluluk | Chrome/Edge dışında garanti verilmiyor |
 | R5 | Yol haritası "zaman kırpma" vaat ediyor, araç yapmıyor | Kullanıcı beklentisi karşılanmıyor | FR-55 |
+| R6 | Yedekleme medyayı base64 `dataUrl` olarak tek JSON'a gömüyor | Büyük projelerde (yüzlerce MB video) base64 %33 şişme + tek string bellekte → sekme çökebilir | Küçük projelerde sorunsuz doğrulandı; büyük dosyada test edilmedi |
 
 ---
 
