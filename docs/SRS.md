@@ -117,8 +117,9 @@ Durum anahtarı: **TAMAM** = test edilerek doğrulandı · **KISMİ** = çalış
 | FR-53 | **Dönüştür** — MP4 ↔ WebM, çözünürlük değiştirme | TAMAM — canlıda doğrulandı |
 | FR-54 | **Kırp** — en-boy oranı (9:16 / 1:1 / 16:9) | TAMAM — 16:9→1080×1920 doğrulandı |
 | FR-55 | **Zaman kırpma** (videonun bir aralığını alma) | **YOK** — yol haritası vaat ediyor, araç yapmıyor |
-| FR-56 | **Ses ayıkla** — .m4a olarak çıkarma | KISMİ — kod tam, sesli dosyayla uçtan uca test edilmedi |
-| FR-57 | **Sesi kaldır** — sessiz video üretme | KISMİ — aynı şekilde test edilmedi |
+| FR-56 | **Ses ayıkla** — .m4a olarak çıkarma | TAMAM — çıktı `audio/mp4`, 19.14 sn, stereo 48 kHz, genlik 0.6361 |
+| FR-57 | **Sesi kaldır** — sessiz video üretme | TAMAM — ses izi yok, video sağlam (320×180, 18.9 sn) |
+| FR-61 | Araç çıktısını "Stüdyoya Git" ile projeye aktarma | TAMAM — asset IndexedDB'ye yazılıyor, proje açılıyor, o projeden video üretildi (1080×1920, 8 sn) |
 | FR-58 | Desteklenmeyen tarayıcıda net uyarı | TAMAM |
 | FR-59 | Analiz hatalarının kullanıcıya gösterilmesi | TAMAM |
 | FR-60 | Web Worker'da çalışma (arayüz donmaz) | TAMAM |
@@ -174,7 +175,7 @@ Durum anahtarı: **TAMAM** = test edilerek doğrulandı · **KISMİ** = çalış
 ### P0 — Doğrulama boşlukları (kod yazmadan önce bunlar kapatılmalı)
 1. **FR-35**: TTS seslendirmeli çok sahneli projeyi hızlı yolda uçtan uca test et; sesin doğru
    sahnede olduğunu enerji ölçümüyle kanıtla.
-2. **FR-56/57**: Ses ayıkla ve sesi kaldır araçlarını gerçek sesli dosyayla test et.
+2. ~~**FR-56/57**: Ses araçlarını gerçek sesli dosyayla test et~~ — **YAPILDI**, ölçümle doğrulandı.
 3. ~~**R2**: Seslendirme yolunu mediabunny'ye taşı~~ — **YAPILDI** (`decodeAudioParts`,
    commit `a118c5d`); ölçümle doğrulandı.
 
@@ -202,7 +203,8 @@ V1 ancak şunların **hepsi** sağlandığında ilan edilir:
 - [x] Kalite kapısı geçiyor (27/27 test, typecheck, lint, build)
 - [x] Production deploy çalışıyor
 - [ ] TTS seslendirmesi hızlı export'ta doğrulandı (P0-1)
-- [ ] Ses araçları doğrulandı (P0-2)
+- [x] Ses araçları doğrulandı (P0-2)
+- [x] Araç → Stüdyo aktarım zinciri doğrulandı (FR-61)
 - [ ] Chrome + Edge kabul testi
 - [ ] Mobil kabul testi
 - [ ] Bağımsız (ffprobe) dosya analizi
