@@ -42,6 +42,9 @@ const MOTION_LABELS: Record<Motion, string> = {
   zoom_out: "Uzaklaş",
   pan_left: "Sola kaydır",
   pan_right: "Sağa kaydır",
+  shake: "Kamera Sarsıntısı (Titreme)",
+  whip_pan_left: "Hızlı Sola Kaydır",
+  whip_pan_right: "Hızlı Sağa Kaydır",
 };
 
 const SUB_COLORS = ["#ffffff", "#facc15", "#22c55e", "#60a5fa", "#f472b6", "#fb923c"];

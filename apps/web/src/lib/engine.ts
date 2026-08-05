@@ -121,15 +121,27 @@ function wrapText(
 function motionTransform(scene: Scene, p: number) {
   switch (scene.motion) {
     case "zoom_in":
-      return { zoom: 1 + 0.18 * p, panX: 0 };
+      return { zoom: 1 + 0.18 * p, panX: 0, panY: 0 };
     case "zoom_out":
-      return { zoom: 1.18 - 0.18 * p, panX: 0 };
+      return { zoom: 1.18 - 0.18 * p, panX: 0, panY: 0 };
     case "pan_left":
-      return { zoom: 1.18, panX: 1 - 2 * p };
+      return { zoom: 1.18, panX: 1 - 2 * p, panY: 0 };
     case "pan_right":
-      return { zoom: 1.18, panX: -1 + 2 * p };
+      return { zoom: 1.18, panX: -1 + 2 * p, panY: 0 };
+    case "shake": {
+      const shakeAmt = 0.05 * Math.sin(p * Math.PI * 40); 
+      return { zoom: 1.1 + Math.abs(shakeAmt), panX: shakeAmt, panY: shakeAmt };
+    }
+    case "whip_pan_left": {
+      const ease = 1 - Math.pow(1 - p, 4);
+      return { zoom: 1.1, panX: 1 - 2 * ease, panY: 0 };
+    }
+    case "whip_pan_right": {
+      const ease = 1 - Math.pow(1 - p, 4);
+      return { zoom: 1.1, panX: -1 + 2 * ease, panY: 0 };
+    }
     default:
-      return { zoom: 1, panX: 0 };
+      return { zoom: 1, panX: 0, panY: 0 };
   }
 }
 
@@ -143,13 +155,14 @@ function drawCover(
   const ih = el instanceof HTMLVideoElement ? el.videoHeight : el.naturalHeight;
   if (!iw || !ih) return;
 
-  const { zoom, panX } = motionTransform(scene, p);
+  const { zoom, panX, panY = 0 } = motionTransform(scene, p);
   const scale = Math.max(VIDEO_WIDTH / iw, VIDEO_HEIGHT / ih) * zoom;
   const dw = iw * scale;
   const dh = ih * scale;
   const maxPan = Math.max(0, (dw - VIDEO_WIDTH) / 2);
+  const maxPanY = Math.max(0, (dh - VIDEO_HEIGHT) / 2);
   const dx = (VIDEO_WIDTH - dw) / 2 + panX * maxPan;
-  const dy = (VIDEO_HEIGHT - dh) / 2;
+  const dy = (VIDEO_HEIGHT - dh) / 2 + panY * maxPanY;
   ctx.drawImage(el, dx, dy, dw, dh);
 }
 
