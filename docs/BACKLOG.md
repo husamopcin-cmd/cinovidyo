@@ -30,7 +30,7 @@ teknik yolu belli.
 
 | ID | Kullanıcı hikâyesi | Puan | Durum |
 |---|---|---|---|
-| US-101 | Kullanıcı olarak, TTS seslendirmeli videomun sesinin doğru sahnede ve doğru seviyede çıktığından emin olmak istiyorum | 3 | **SPRINT 1** |
+| US-101 | Kullanıcı olarak, TTS seslendirmeli videomun sesinin doğru sahnede ve doğru seviyede çıktığından emin olmak istiyorum | 3 | ✅ Bitti |
 | US-102 | Geliştirici olarak, çıktı MP4'ün codec/süre/stream yapısını bağımsız araçla (ffprobe) doğrulamak istiyorum | 3 | Bloke — ffmpeg kurulu değil |
 | US-103 | Kullanıcı olarak, uygulamayı Safari ve Firefox'ta da sorunsuz kullanmak istiyorum | 5 | Backlog |
 | US-104 | Kullanıcı olarak, uygulamayı telefonumda kullanmak istiyorum | 5 | Backlog |
@@ -50,7 +50,7 @@ teknik yolu belli.
 
 | ID | Kullanıcı hikâyesi | Puan | Durum |
 |---|---|---|---|
-| US-201 | Kullanıcı olarak, uzun bir videonun **sadece belirli bir zaman aralığını** almak istiyorum | 5 | **SPRINT 1** |
+| US-201 | Kullanıcı olarak, uzun bir videonun **sadece belirli bir zaman aralığını** almak istiyorum | 5 | ✅ Bitti |
 | US-202 | Kullanıcı olarak, çok büyük dosyaları belleğe sığmadan diske akıtarak kaydetmek istiyorum | 5 | Backlog (R1) |
 | US-203 | Kullanıcı olarak, yedeğimin büyük projelerde de çalışmasını istiyorum | 5 | Backlog (R6) |
 
@@ -67,7 +67,7 @@ teknik yolu belli.
 
 | ID | Kullanıcı hikâyesi | Puan | Durum |
 |---|---|---|---|
-| US-301 | Kullanıcı olarak, seçtiğim animasyonun **metin sahnelerinde de** çalışmasını istiyorum | 3 | **SPRINT 1** |
+| US-301 | Kullanıcı olarak, seçtiğim animasyonun **metin sahnelerinde de** çalışmasını istiyorum | 3 | ✅ Bitti |
 | US-302 | Kullanıcı olarak, AI asistanın yeni animasyonları da önerebilmesini istiyorum | 2 | Backlog |
 
 **US-301 gerekçesi (bulgu)**
@@ -92,20 +92,54 @@ olmuyor — **sessiz başarısızlık**, NFR-03'e aykırı.
 
 ---
 
-## SPRINT 1 (aktif)
+## SPRINT 1 — **TAMAMLANDI** ✅
 
 **Sprint hedefi:** V1'in son doğrulama boşluğunu kapatmak ve araç setindeki gerçek eksiği
 (zaman kırpma) tamamlamak.
 
-| ID | İş | Puan |
-|---|---|---|
-| US-101 | TTS'li export doğrulaması | 3 |
-| US-201 | Zaman aralığı kırpma | 5 |
-| US-301 | Metin sahnesinde animasyon | 3 |
+| ID | İş | Puan | Sonuç |
+|---|---|---|---|
+| US-101 | TTS'li export doğrulaması | 3 | ✅ 0.3–4.5 sn enerji 0.07075; 6–12 ve 20–29 sn tam sessiz |
+| US-201 | Zaman aralığı kırpma | 5 | ✅ 38 sn → 10–20 aralığı → çıktı tam 10.00 sn |
+| US-301 | Metin sahnesinde animasyon | 3 | ✅ Kare farkı 0.243 → 8.178 (33 kat) |
 
-**Toplam:** 11 puan
+**Tamamlanan:** 11/11 puan · **Kalite kapısı:** 31/31 test, typecheck/lint/build PASS
+
+### Sprint 1 retrospektif
+- **İyi giden:** Her hikâye kabul kriterine bağlı **ölçümle** kapatıldı; hiçbiri "çalışıyor
+  gibi görünüyor" ile geçilmedi. US-301'de kontrollü deney (animasyon kapalı/açık
+  karşılaştırması) kullanıldı — bu yöntem bundan sonra da standart olmalı.
+- **Sorun:** Paralel oturumlar aynı dosyalara dokunup daha önce düzeltilmiş bir hatayı
+  (şeffaf buton, `var(--bg-card)`) geri getirdi. **Önlem:** her sprint başında `git status`
+  ve `git diff` ile gelen değişiklikler incelenmeli, körlemesine commit'lenmemeli.
+- **Ölçüm:** Tahmin 11 puan, gerçekleşen 11 puan.
 
 **Sprint dışı bırakılanlar ve nedeni:**
 - US-102 (ffprobe): ffmpeg kurulu değil → dış engel
 - US-103/104 (Safari/mobil): bu ortamda o tarayıcılar yok → elle test gerekir
 - EPIC 4: V1 kapanmadan başlanmaz
+
+---
+
+## SPRINT 2 (sıradaki)
+
+**Sprint hedefi:** V1'i mühürlemek. Kalan işlerin tamamı **doğrulama** — yeni kod yazmayı
+değil, farklı ortamlarda kanıt toplamayı gerektiriyor.
+
+| ID | İş | Puan | Kim yapmalı |
+|---|---|---|---|
+| US-103 | Safari + Firefox kabul testi | 5 | **Kullanıcı** (bu ortamda o tarayıcılar yok) |
+| US-104 | Gerçek mobil cihaz testi | 5 | **Kullanıcı** (fiziksel cihaz gerekir) |
+| US-102 | ffprobe ile bağımsız dosya analizi | 3 | Kullanıcı `winget install Gyan.FFmpeg` kurunca ajan yapabilir |
+| US-105 | `v1.0.0` etiketi | 1 | Yukarıdakiler geçince ajan |
+
+**Neden ajan tek başına bitiremiyor:** Otomasyon tarayıcısı yalnızca Chromium tabanlı ve
+gizli sekmede çalışıyor; Safari/Firefox motorları ve dokunmatik/mobil davranış burada
+taklit edilemez. `ffprobe` de sistemde kurulu değil.
+
+**Kullanıcı için kabul testi listesi (elle):**
+1. Safari ve Firefox'ta `/araclar/sikistir` aç → bir video sıkıştır → indir → aç
+2. Aynı tarayıcılarda `/new` ile proje kur → "Videoyu üret" → çıktıyı oynat
+3. Telefonda (Android Chrome + iPhone Safari) aynı iki akışı dene
+4. Desteklenmeyen bir tarayıcıda **net uyarı** çıkıyor mu (sessizce bozulmuyor mu) kontrol et
+5. Sonucu bildir → ajan SRS'i günceller ve `v1.0.0` etiketini atar

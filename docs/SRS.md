@@ -93,7 +93,7 @@ Durum anahtarı: **TAMAM** = test edilerek doğrulandı · **KISMİ** = çalış
 | FR-32 | Sekme arka plandayken de çalışma | TAMAM — gizli sekmede doğrulandı |
 | FR-33 | Müzik sesinin videoya gömülmesi | TAMAM — stereo 48 kHz, genlik 0.0455 ölçüldü |
 | FR-34 | Sahne videosunun kendi sesinin gömülmesi | TAMAM — doğru pencerede enerji 0.405; sahne dışı tam sessiz |
-| FR-35 | TTS seslendirmesinin videoya gömülmesi | KISMİ — kod yolu artık dayanıklı çözücüyü kullanıyor (R2 kapandı), ancak **TTS'li proje uçtan uca ölçülmedi** |
+| FR-35 | TTS seslendirmesinin videoya gömülmesi | TAMAM — canlıda Google TTS ile üretilen 4.9 sn'lik ses, 0.3–4.5 sn aralığında enerji 0.07075; 6–12 ve 20–29 sn tam sessiz |
 | FR-38 | Ses seviyesi ayarının çıktıya yansıması | TAMAM — %65→0.4051, %20→0.12689; teorik değerle birebir |
 | FR-36 | İlerleme göstergesi ve iptal | TAMAM |
 | FR-37 | Hızlı yol başarısız olursa gerçek zamanlı yola düşme | TAMAM — kullanıcıya bildirilerek |
@@ -116,7 +116,7 @@ Durum anahtarı: **TAMAM** = test edilerek doğrulandı · **KISMİ** = çalış
 | FR-52 | Kaynaktan yüksek bit hızı seçilirse dosyayı büyütmeme | TAMAM |
 | FR-53 | **Dönüştür** — MP4 ↔ WebM, çözünürlük değiştirme | TAMAM — canlıda doğrulandı |
 | FR-54 | **Kırp** — en-boy oranı (9:16 / 1:1 / 16:9) | TAMAM — 16:9→1080×1920 doğrulandı |
-| FR-55 | **Zaman kırpma** (videonun bir aralığını alma) | **YOK** — yol haritası vaat ediyor, araç yapmıyor |
+| FR-55 | **Zaman kırpma** (videonun bir aralığını alma) | TAMAM — 38 sn kaynaktan 10–20 aralığı kesildi, çıktı tam 10.00 sn, çözünürlük korundu |
 | FR-56 | **Ses ayıkla** — .m4a olarak çıkarma | TAMAM — çıktı `audio/mp4`, 19.14 sn, stereo 48 kHz, genlik 0.6361 |
 | FR-57 | **Sesi kaldır** — sessiz video üretme | TAMAM — ses izi yok, video sağlam (320×180, 18.9 sn) |
 | FR-61 | Araç çıktısını "Stüdyoya Git" ile projeye aktarma | TAMAM — asset IndexedDB'ye yazılıyor, proje açılıyor, o projeden video üretildi (1080×1920, 8 sn) |
@@ -173,12 +173,13 @@ Durum anahtarı: **TAMAM** = test edilerek doğrulandı · **KISMİ** = çalış
 
 ## 8. Sıradaki Plan (öncelik sırasıyla)
 
-### P0 — Doğrulama boşlukları (kod yazmadan önce bunlar kapatılmalı)
-1. **FR-35**: TTS seslendirmeli çok sahneli projeyi hızlı yolda uçtan uca test et; sesin doğru
-   sahnede olduğunu enerji ölçümüyle kanıtla.
-2. ~~**FR-56/57**: Ses araçlarını gerçek sesli dosyayla test et~~ — **YAPILDI**, ölçümle doğrulandı.
-3. ~~**R2**: Seslendirme yolunu mediabunny'ye taşı~~ — **YAPILDI** (`decodeAudioParts`,
-   commit `a118c5d`); ölçümle doğrulandı.
+### P0 — Doğrulama boşlukları · **TAMAMI KAPANDI**
+1. ~~**FR-35**: TTS'li export doğrulaması~~ — **YAPILDI**, canlıda enerji ölçümüyle kanıtlandı.
+2. ~~**FR-56/57**: Ses araçlarını gerçek sesli dosyayla test et~~ — **YAPILDI**.
+3. ~~**R2**: Seslendirme yolunu mediabunny'ye taşı~~ — **YAPILDI** (`decodeAudioParts`, `a118c5d`).
+
+### P1 — Eksik özellik · **KAPANDI**
+4. ~~**FR-55**: Zaman kırpma~~ — **YAPILDI** (`ab0c4a2`), ölçümle doğrulandı.
 
 ### P1 — Eksik özellik
 4. **FR-55**: Zaman kırpma. Motor zaten destekliyor (`Conversion.init({ trim: {start, end} })`),
@@ -203,7 +204,7 @@ V1 ancak şunların **hepsi** sağlandığında ilan edilir:
 - [x] 4 araç da çalışıyor
 - [x] Kalite kapısı geçiyor (27/27 test, typecheck, lint, build)
 - [x] Production deploy çalışıyor
-- [ ] TTS seslendirmesi hızlı export'ta doğrulandı (P0-1)
+- [x] TTS seslendirmesi hızlı export'ta doğrulandı (P0-1)
 - [x] Ses araçları doğrulandı (P0-2)
 - [x] Araç → Stüdyo aktarım zinciri doğrulandı (FR-61)
 - [ ] Chrome + Edge kabul testi
