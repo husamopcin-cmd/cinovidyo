@@ -29,7 +29,11 @@ export default function Kirp() {
   const [info, setInfo] = useState<MediaInfo | null>(null);
   
   const [aspect, setAspect] = useState<"9:16" | "1:1" | "16:9">("9:16");
-  
+  /** "oran" = en-boy oranı kırpma, "zaman" = belirli bir zaman aralığını alma */
+  const [mode, setMode] = useState<"oran" | "zaman">("oran");
+  const [trimStart, setTrimStart] = useState(0);
+  const [trimEnd, setTrimEnd] = useState(0);
+
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ url?: string; sizeBytes: number; name: string; blob?: Blob } | null>(null);
@@ -50,9 +54,21 @@ export default function Kirp() {
   }, []);
 
   function currentOptions(): CompressOptions {
+    // Zaman modunda çözünürlüğe dokunulmaz; yalnızca seçilen aralık alınır.
+    if (mode === "zaman") {
+      return {
+        maxDimension: null,
+        videoBitrate: info ? info.bitrateBps : 2_500_000,
+        audioBitrate: 128_000,
+        trimStartSec: trimStart,
+        trimEndSec: trimEnd,
+        container: "mp4",
+      };
+    }
+
     let cropWidth = 1080;
     let cropHeight = 1920;
-    
+
     if (aspect === "1:1") {
       cropWidth = 1080;
       cropHeight = 1080;
@@ -82,6 +98,9 @@ export default function Kirp() {
     try {
       const media = await analyze(f);
       setInfo(media);
+      // Zaman aralığı varsayılanı: videonun tamamı.
+      setTrimStart(0);
+      setTrimEnd(Math.round(media.durationSec * 10) / 10);
       setPhase("hazir");
     } catch (err) {
       setInfo(null);
@@ -158,7 +177,8 @@ export default function Kirp() {
       }
 
       const base = file.name.replace(/\.[^.]+$/, "");
-      setResult({ url, sizeBytes: res.sizeBytes, name: `${base}-kirpildi.mp4`, blob: res.blob });
+      const ek = mode === "zaman" ? "-kesit" : "-kirpildi";
+      setResult({ url, sizeBytes: res.sizeBytes, name: `${base}${ek}.mp4`, blob: res.blob });
       setPhase("bitti");
     } catch (err) {
       setPhase("hazir");
@@ -181,10 +201,11 @@ export default function Kirp() {
             ← Araçlar
           </Link>
           <h1 className="h2" style={{ marginTop: 8, fontSize: "1.6rem" }}>
-            Video Kırpıcı (Görüntü Oranı)
+            Video Kırpıcı
           </h1>
           <p className="muted" style={{ marginTop: 6 }}>
-            Yatay videoları dikey (Reels/Shorts) yap veya kareye dönüştür. Görüntü merkeze hizalanır ve fazlalıklar kesilir.
+            İki şekilde kırpabilirsin: <strong>görüntü oranı</strong> (yatay videoyu dikey/kare
+            yap) veya <strong>zaman aralığı</strong> (videonun sadece istediğin bölümünü al).
           </p>
         </div>
 
@@ -233,8 +254,87 @@ export default function Kirp() {
 
             {info && (
               <div className="card stack">
-                <div className="section-title">2 · Kırpma Oranı</div>
+                <div className="section-title">2 · Ne yapmak istiyorsun?</div>
                 <div className="stack" style={{ gap: 16 }}>
+                  <div className="row" style={{ gap: 8 }}>
+                    <label
+                      className={`scene-item ${mode === "oran" ? "active" : ""}`}
+                      style={{ flex: 1, cursor: "pointer", textAlign: "center" }}
+                    >
+                      <input
+                        type="radio"
+                        name="kirpModu"
+                        checked={mode === "oran"}
+                        onChange={() => setMode("oran")}
+                      />
+                      <strong>🖼️ Görüntü oranı</strong>
+                      <div className="tiny">Yatayı dikey yap, kareye çevir</div>
+                    </label>
+                    <label
+                      className={`scene-item ${mode === "zaman" ? "active" : ""}`}
+                      style={{ flex: 1, cursor: "pointer", textAlign: "center" }}
+                    >
+                      <input
+                        type="radio"
+                        name="kirpModu"
+                        checked={mode === "zaman"}
+                        onChange={() => setMode("zaman")}
+                      />
+                      <strong>⏱️ Zaman aralığı</strong>
+                      <div className="tiny">Sadece istediğin bölümü al</div>
+                    </label>
+                  </div>
+
+                  {mode === "zaman" && (
+                    <div className="stack" style={{ gap: 12 }}>
+                      <div>
+                        <label className="label">Başlangıç: {formatDuration(trimStart)}</label>
+                        <input
+                          type="range"
+                          className="range"
+                          min={0}
+                          max={Math.max(0, info.durationSec - 0.5)}
+                          step={0.1}
+                          value={trimStart}
+                          onChange={(e) => {
+                            const v = Number(e.target.value);
+                            setTrimStart(v);
+                            // Başlangıç bitişi geçemez; en az 0.5 sn aralık kalsın.
+                            if (v >= trimEnd - 0.5) {
+                              setTrimEnd(Math.min(info.durationSec, v + 0.5));
+                            }
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="label">Bitiş: {formatDuration(trimEnd)}</label>
+                        <input
+                          type="range"
+                          className="range"
+                          min={0.5}
+                          max={Math.round(info.durationSec * 10) / 10}
+                          step={0.1}
+                          value={trimEnd}
+                          onChange={(e) => {
+                            const v = Number(e.target.value);
+                            setTrimEnd(v);
+                            if (v <= trimStart + 0.5) {
+                              setTrimStart(Math.max(0, v - 0.5));
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="notice notice-ok">
+                        Seçilen aralık: <strong>{formatDuration(trimEnd - trimStart)}</strong>{" "}
+                        ({formatDuration(trimStart)} → {formatDuration(trimEnd)})
+                        <div className="tiny" style={{ marginTop: 4 }}>
+                          Çözünürlük ve en-boy oranı değişmez; yalnızca bu aralık alınır.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {mode === "oran" && (
                   <div>
                     <label className="label">Hedef Format</label>
                     <div className="row" style={{ gap: 8, marginTop: 8 }}>
@@ -255,6 +355,7 @@ export default function Kirp() {
                       </label>
                     </div>
                   </div>
+                  )}
                 </div>
               </div>
             )}
@@ -264,7 +365,7 @@ export default function Kirp() {
                 <div className="section-title">3 · Başlat</div>
                 {phase !== "calisiyor" ? (
                   <button className="btn btn-primary btn-lg" onClick={() => void start()}>
-                    Videoyu Kırp
+                    {mode === "zaman" ? "Aralığı Kes ve Kaydet" : "Videoyu Kırp"}
                   </button>
                 ) : (
                   <>

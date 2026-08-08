@@ -167,6 +167,27 @@ function drawCover(
 }
 
 function drawTextScene(ctx: CanvasRenderingContext2D, scene: Scene, p: number) {
+  // Kamera hareketi metin sahnelerinde de uygulanır. Daha önce motionTransform
+  // yalnızca drawCover içinde çağrılıyordu; kullanıcı metin sahnesinde bir
+  // animasyon seçtiğinde hiçbir şey olmuyordu (sessiz başarısızlık).
+  //
+  // Görselde olduğu gibi, özgün 1080×1920 alan (dx, dy, dw, dh) dikdörtgenine
+  // eşlenir. Kaydırma miktarı büyütmeden doğan paydan fazla olamaz, bu yüzden
+  // kenarlarda hiçbir zaman boşluk açılmaz (zoom = 1 iken kaydırma da 0'dır).
+  const { zoom, panX, panY = 0 } = motionTransform(scene, p);
+  const dw = VIDEO_WIDTH * zoom;
+  const dh = VIDEO_HEIGHT * zoom;
+  const maxPanX = Math.max(0, (dw - VIDEO_WIDTH) / 2);
+  const maxPanY = Math.max(0, (dh - VIDEO_HEIGHT) / 2);
+
+  ctx.save();
+  ctx.translate((VIDEO_WIDTH - dw) / 2 + panX * maxPanX, (VIDEO_HEIGHT - dh) / 2 + panY * maxPanY);
+  ctx.scale(zoom, zoom);
+  drawTextSceneContent(ctx, scene, p);
+  ctx.restore();
+}
+
+function drawTextSceneContent(ctx: CanvasRenderingContext2D, scene: Scene, p: number) {
   const [from, to] = PALETTES[scene.palette ?? "violet"] ?? PALETTES.violet;
   const grad = ctx.createLinearGradient(0, 0, VIDEO_WIDTH, VIDEO_HEIGHT);
   grad.addColorStop(0, from);

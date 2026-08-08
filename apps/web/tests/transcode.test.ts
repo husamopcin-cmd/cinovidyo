@@ -165,3 +165,45 @@ test("süre biçimlendirme saat eşiğini doğru aşar", () => {
   assert.equal(formatDuration(605), "10:05");
   assert.equal(formatDuration(3661), "1:01:01");
 });
+
+/* ── Zaman aralığı kırpma (US-201) ──
+   Worker'daki geçerlilik ve süre hesabıyla aynı kuralı doğrular: aralık ancak
+   start < end iken uygulanır, çıktı süresi de aralığın kendisidir. */
+
+function trimGecerliMi(o: { trimStartSec?: number; trimEndSec?: number }): boolean {
+  return (
+    typeof o.trimStartSec === "number" &&
+    typeof o.trimEndSec === "number" &&
+    o.trimEndSec > o.trimStartSec
+  );
+}
+
+function ciktiSuresi(
+  o: { trimStartSec?: number; trimEndSec?: number },
+  kaynakSure: number
+): number {
+  return trimGecerliMi(o) ? o.trimEndSec! - o.trimStartSec! : kaynakSure;
+}
+
+test("geçerli aralıkta çıktı süresi aralığın uzunluğudur", () => {
+  const o = { trimStartSec: 10, trimEndSec: 20 };
+  assert.equal(trimGecerliMi(o), true);
+  assert.equal(ciktiSuresi(o, 38), 10);
+});
+
+test("aralık verilmezse kaynak süresi korunur", () => {
+  assert.equal(trimGecerliMi({}), false);
+  assert.equal(ciktiSuresi({}, 38), 38);
+});
+
+test("başlangıç bitişten büyük veya eşitse aralık uygulanmaz", () => {
+  assert.equal(trimGecerliMi({ trimStartSec: 20, trimEndSec: 10 }), false);
+  assert.equal(trimGecerliMi({ trimStartSec: 5, trimEndSec: 5 }), false);
+  // Geçersiz aralıkta kaynak süresi korunur — sessizce 0 sn video üretilmez.
+  assert.equal(ciktiSuresi({ trimStartSec: 20, trimEndSec: 10 }, 38), 38);
+});
+
+test("yalnızca tek uç verilirse aralık uygulanmaz", () => {
+  assert.equal(trimGecerliMi({ trimStartSec: 5 }), false);
+  assert.equal(trimGecerliMi({ trimEndSec: 5 }), false);
+});

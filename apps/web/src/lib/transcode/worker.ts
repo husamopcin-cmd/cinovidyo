@@ -72,6 +72,18 @@ self.addEventListener("message", async (e: MessageEvent) => {
         target,
       });
 
+      // Zaman aralığı kırpma: yalnızca geçerli bir aralık verildiyse uygulanır.
+      // mediabunny start < end bekler; geçersiz aralıkta trim hiç gönderilmez.
+      const hasTrim =
+        typeof options.trimStartSec === "number" &&
+        typeof options.trimEndSec === "number" &&
+        options.trimEndSec > options.trimStartSec;
+
+      // Kırpılmışsa çıktı süresi kaynağınki değil, seçilen aralıktır.
+      const outputDurationSec = hasTrim
+        ? options.trimEndSec! - options.trimStartSec!
+        : info.durationSec;
+
       const conversion = await Conversion.init({
         input,
         output,
@@ -82,6 +94,9 @@ self.addEventListener("message", async (e: MessageEvent) => {
           fit,
         },
         audio: options.removeAudio ? { discard: true } : { bitrate: options.audioBitrate },
+        ...(hasTrim
+          ? { trim: { start: options.trimStartSec, end: options.trimEndSec } }
+          : {}),
       });
 
       conversion.onProgress = (ratio) => {
@@ -103,9 +118,9 @@ self.addEventListener("message", async (e: MessageEvent) => {
               ? "audio/mp4"
               : "video/mp4";
         const blob = new Blob([bufferTarget.buffer], { type: mime });
-        self.postMessage({ id, type: "success", result: { blob, sizeBytes: blob.size, width, height, durationSec: info.durationSec } });
+        self.postMessage({ id, type: "success", result: { blob, sizeBytes: blob.size, width, height, durationSec: outputDurationSec } });
       } else {
-        self.postMessage({ id, type: "success", result: { sizeBytes: 0 /* Will be handled by main thread */, width, height, durationSec: info.durationSec } });
+        self.postMessage({ id, type: "success", result: { sizeBytes: 0 /* Will be handled by main thread */, width, height, durationSec: outputDurationSec } });
       }
 
       input.dispose();

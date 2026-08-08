@@ -53,6 +53,9 @@ export type CompressOptions = {
   audioBitrate: number;
   removeAudio?: boolean;
   container?: "mp4" | "webm" | "m4a";
+  /** Zaman aralığı kırpma: kaynağın yalnızca [trimStartSec, trimEndSec] aralığı alınır. */
+  trimStartSec?: number;
+  trimEndSec?: number;
   // Kırpma (Görüntü)
   cropWidth?: number;
   cropHeight?: number;
